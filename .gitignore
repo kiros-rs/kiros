@@ -1,0 +1,7 @@
+# Ignore all build output
+debug/
+target/
+
+# Let users decide the software version
+**/Cargo.lock
+!cli/Cargo.lock
