@@ -1,3 +1,5 @@
+pub mod dynamixel;
+
 #[cfg(test)]
 mod tests {
     #[test]
