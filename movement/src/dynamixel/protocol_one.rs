@@ -1,3 +1,9 @@
+//! # Protocol 1
+//! This file contains a collection of abstract representations used to
+//! communicate with Robotis 'Dynamixel' servos via their
+//! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
+
+/// Represents the types of instructions that can be sent to a Dynamixel.
 #[derive(Debug)]
 pub enum InstructionType {
     Ping,
@@ -42,8 +48,13 @@ impl InstructionType {
     }
 }
 
+/// Represents the types of statuses that can be returned by a Dynamixel,
+/// as stored using each bit to represent a different error. For more info, see
+/// https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet
 #[derive(Debug)]
 pub enum StatusType {
+    // This needs work - maybe a Result to represent either success or failure?
+    // It should not be possible to have Success and Overload at the same time.
     Success,
     Instruction,
     Overload,
@@ -106,12 +117,15 @@ impl StatusType {
     }
 }
 
+/// Represents the different kinds of values that can be stored in the packet's
+/// error/instruction column.
 #[derive(Debug)]
 pub enum PacketType {
     Instruction(InstructionType),
     Status(Vec<StatusType>),
 }
 
+/// Reresents either an outgoing or incoming packet.
 #[derive(Debug)]
 pub struct Packet {
     pub id: u8,
@@ -141,7 +155,6 @@ impl Packet {
         self.checksum = !chk;
     }
 
-    // Should this become a builder pattern?
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         let mut packet = Packet {
             id,
@@ -156,22 +169,8 @@ impl Packet {
     }
 }
 
-// THE REST OF THIS SECTION NEEDS TO BE CAREFULLY DESIGNED
-
-// Abstract way of representing a link between computer & U2D2
-// Default implementation should be using USB, but hopefully we could get some
-// other interfaces working at some point (eg Arduino)
-pub trait PortHandler {
-    fn send();
-    fn recv();
-}
-
-// Can the interface be simplified?
-pub trait PacketHandler {
-    fn send_packet(packet: Packet);
-    fn receive_packet() -> Option<Packet>;
-}
-
+/// Provides various methods for handling the outgoing & incoming communication
+/// with a Dynamixel.
 pub trait ProtocolHandler {
     fn ping() -> Packet;
     fn read() -> Packet;
