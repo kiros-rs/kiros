@@ -3,8 +3,10 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
+use std::convert::TryFrom;
+
 /// Represents the types of instructions that can be sent to a Dynamixel.
-#[derive(Debug)]
+#[derive(Copy, Clone, Debug)]
 pub enum InstructionType {
     Ping,
     Read,
@@ -17,9 +19,9 @@ pub enum InstructionType {
     BulkRead,
 }
 
-impl InstructionType {
-    pub fn get_instruction_code(instruction: &InstructionType) -> u8 {
-        match *instruction {
+impl From<InstructionType> for u8 {
+    fn from(instruction: InstructionType) -> u8 {
+        match instruction {
             InstructionType::Ping => 1,
             InstructionType::Read => 2,
             InstructionType::Write => 3,
@@ -31,9 +33,12 @@ impl InstructionType {
             InstructionType::BulkRead => 9,
         }
     }
+}
 
-    pub fn get_instruction_type(instruction: &u8) -> Result<InstructionType, String> {
-        match *instruction {
+impl TryFrom<u8> for InstructionType {
+    type Error = &'static str;
+    fn try_from(instruction: u8) -> Result<InstructionType, Self::Error> {
+        match instruction {
             1 => Ok(InstructionType::Ping),
             2 => Ok(InstructionType::Read),
             3 => Ok(InstructionType::Write),
@@ -43,7 +48,7 @@ impl InstructionType {
             7 => Ok(InstructionType::Reboot),
             8 => Ok(InstructionType::SyncWrite),
             9 => Ok(InstructionType::BulkRead),
-            _ => Err("Instruction out of range!".to_string()),
+            _ => Err("Unable to match out-of-range instruction!"),
         }
     }
 }
@@ -51,7 +56,7 @@ impl InstructionType {
 /// Represents the types of statuses that can be returned by a Dynamixel,
 /// as stored using each bit to represent a different error. For more info, see
 /// https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum StatusType {
     // This needs work - maybe a Result to represent either success or failure?
     // It should not be possible to have Success and Overload at the same time.
@@ -119,14 +124,14 @@ impl StatusType {
 
 /// Represents the different kinds of values that can be stored in the packet's
 /// error/instruction column.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub enum PacketType {
     Instruction(InstructionType),
     Status(Vec<StatusType>),
 }
 
 /// Reresents either an outgoing or incoming packet.
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct Packet {
     pub id: u8,
     length: u8,
@@ -140,9 +145,7 @@ impl Packet {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += match &self.packet_type {
-            PacketType::Instruction(instruction) => {
-                InstructionType::get_instruction_code(instruction)
-            }
+            PacketType::Instruction(instruction) => *instruction as u8,
             PacketType::Status(statuses) => StatusType::get_error_code(statuses),
         } as usize;
 
