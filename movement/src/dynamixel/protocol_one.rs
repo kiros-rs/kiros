@@ -141,11 +141,11 @@ pub struct Packet {
 }
 
 impl Packet {
-    fn calc_checksum(&mut self) {
+    fn checksum(&mut self) {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += match &self.packet_type {
-            PacketType::Instruction(instruction) => *instruction as u8,
+            PacketType::Instruction(instruction) => u8::from(*instruction),
             PacketType::Status(statuses) => StatusType::get_error_code(statuses),
         } as usize;
 
@@ -167,21 +167,21 @@ impl Packet {
             checksum: 0,
         };
 
-        packet.calc_checksum();
+        packet.checksum();
         packet
     }
-}
 
-/// Provides various methods for handling the outgoing & incoming communication
-/// with a Dynamixel.
-pub trait ProtocolHandler {
-    fn ping() -> Packet;
-    fn read() -> Packet;
-    fn write() -> Packet;
-    fn reg_write() -> Packet;
-    fn action() -> Packet;
-    fn reset() -> Packet;
-    fn reboot() -> Packet;
-    fn sync_write() -> Packet;
-    fn bulk_read() -> Packet;
+    /// Provides packet-crafting functionality for servo communication. If you want
+    /// to actually write to the servo, see the PortHandler trait (TODO: LINK).
+    pub fn build(&self) -> Result<Vec<u8>, String> {
+        if let PacketType::Instruction(instruction) = self.packet_type {
+            let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
+            packet.extend(&self.parameters);
+            packet.push(self.checksum);
+
+            Ok(packet)
+        } else {
+            Err("You cannot write a status packet to a servo!".to_string())
+        }
+    }
 }
