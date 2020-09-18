@@ -4,7 +4,7 @@ pub mod protocol_one;
 
 // Extend this with protocol 2 packet
 pub enum PacketProtocol {
-    ProtocolOne(protocol_one::Packet)
+    ProtocolOne(protocol_one::Packet),
 }
 
 pub enum Protocol {
@@ -25,12 +25,12 @@ pub trait PacketBuilder {
 }
 
 pub struct Dynamixel {
-    id: u8,
-    protocol: Protocol,
-    baudrate: usize,
-    control_table: HashMap<u8, u8> // This needs to become its own proper data structure
-    /* Commenting these out until I figure out if they will be useful
-    last_packet: PacketType
-    sent_packets: Vec<u8>
-    */
+    pub id: u8,
+    pub protocol: Protocol,
+    pub baudrate: usize,
+    pub control_table: HashMap<u8, u8>, // This needs to become its own proper data structure
+                                        /* Commenting these out until I figure out if they will be useful
+                                        last_packet: PacketType
+                                        sent_packets: Vec<u8>
+                                        */
 }

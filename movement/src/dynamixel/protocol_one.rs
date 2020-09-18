@@ -3,8 +3,8 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use std::convert::TryFrom;
 use crate::dynamixel::PacketBuilder;
+use std::convert::TryFrom;
 
 /// Represents the types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
@@ -166,7 +166,7 @@ impl PacketBuilder for Packet {
             let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
             packet.extend(&self.parameters);
             packet.push(self.checksum);
-    
+
             Ok(packet)
         } else {
             Err("You cannot write a status packet to a servo!".to_string())
