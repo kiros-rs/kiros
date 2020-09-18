@@ -4,6 +4,7 @@
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
 use std::convert::TryFrom;
+use crate::dynamixel::PacketBuilder;
 
 /// Represents the types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
@@ -140,8 +141,8 @@ pub struct Packet {
     checksum: u8,
 }
 
-impl Packet {
-    fn checksum(&mut self) {
+impl PacketBuilder for Packet {
+    fn checksum(&self) -> u8 {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += match &self.packet_type {
@@ -155,9 +156,26 @@ impl Packet {
             sum as u8
         };
 
-        self.checksum = !chk;
+        !chk
     }
 
+    /// Provides packet-crafting functionality for servo communication. If you want
+    /// to actually write to the servo, see the PortHandler trait (TODO: LINK).
+    fn build(&self) -> Result<Vec<u8>, String> {
+        if let PacketType::Instruction(instruction) = self.packet_type {
+            let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
+            packet.extend(&self.parameters);
+            packet.push(self.checksum);
+    
+            Ok(packet)
+        } else {
+            Err("You cannot write a status packet to a servo!".to_string())
+        }
+    }
+}
+
+// Eventually this should be moved to the Packet trait
+impl Packet {
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         let mut packet = Packet {
             id,
@@ -167,21 +185,7 @@ impl Packet {
             checksum: 0,
         };
 
-        packet.checksum();
+        packet.checksum = packet.checksum();
         packet
-    }
-
-    /// Provides packet-crafting functionality for servo communication. If you want
-    /// to actually write to the servo, see the PortHandler trait (TODO: LINK).
-    pub fn build(&self) -> Result<Vec<u8>, String> {
-        if let PacketType::Instruction(instruction) = self.packet_type {
-            let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
-            packet.extend(&self.parameters);
-            packet.push(self.checksum);
-
-            Ok(packet)
-        } else {
-            Err("You cannot write a status packet to a servo!".to_string())
-        }
     }
 }
