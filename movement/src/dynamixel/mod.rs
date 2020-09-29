@@ -12,16 +12,10 @@ pub enum Protocol {
     ProtocolTwo,
 }
 
-pub trait PortHandler {
+pub trait ConnectionHandler {
     fn write(packet: Vec<u8>) -> Result<std::io::Error, u8>;
     fn read(buf: &mut Vec<u8>) -> Result<std::io::Error, ()>;
-}
-
-// Need to extend this further at some point & find better name
-// Trait so we can have functionality from both protocol versions
-pub trait PacketBuilder {
-    fn checksum(&self) -> u8;
-    fn build(&self) -> Result<Vec<u8>, String>;
+    // flush?
 }
 
 pub struct Dynamixel {
@@ -34,3 +28,14 @@ pub struct Dynamixel {
                                         sent_packets: Vec<u8>
                                         */
 }
+/*
+Note to future self:
+The control table should be populated with not just string associations,
+but a more complex mapping between name & data stored.
+
+There should be an enum with a few different kinds of items:
+- Sensor (temperature, voltage etc)
+- Stored value (id, model etc)
+- Component (led, alarm etc)
+- Constraint (cw limit, compliance margin)
+*/

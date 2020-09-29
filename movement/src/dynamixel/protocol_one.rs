@@ -3,7 +3,6 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use crate::dynamixel::PacketBuilder;
 use std::convert::TryFrom;
 
 /// Represents the types of instructions that can be sent to a Dynamixel.
@@ -141,8 +140,8 @@ pub struct Packet {
     checksum: u8,
 }
 
-impl PacketBuilder for Packet {
-    fn checksum(&self) -> u8 {
+impl Packet {
+    pub fn checksum(&self) -> u8 {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += match &self.packet_type {
@@ -160,8 +159,8 @@ impl PacketBuilder for Packet {
     }
 
     /// Provides packet-crafting functionality for servo communication. If you want
-    /// to actually write to the servo, see the PortHandler trait (TODO: LINK).
-    fn build(&self) -> Result<Vec<u8>, String> {
+    /// to actually write to the servo, see the ConnectionHandler trait (TODO: LINK).
+    pub fn generate(&self) -> Result<Vec<u8>, String> {
         if let PacketType::Instruction(instruction) = self.packet_type {
             let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
             packet.extend(&self.parameters);
@@ -172,10 +171,7 @@ impl PacketBuilder for Packet {
             Err("You cannot write a status packet to a servo!".to_string())
         }
     }
-}
 
-// Eventually this should be moved to the Packet trait
-impl Packet {
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         let mut packet = Packet {
             id,
