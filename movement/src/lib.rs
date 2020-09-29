@@ -1,7 +1,7 @@
 pub mod dynamixel;
 
 pub trait Servo {
-    fn goto(pos: usize, speed: usize) -> Result<(), String>;
+    fn set_pos(pos: usize) -> Result<(), String>;
 }
 
 pub trait Motor {

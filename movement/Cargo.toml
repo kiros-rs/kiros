@@ -4,7 +4,6 @@ version = "0.1.0"
 authors = ["Angus Finch <developer.finchie@gmail.com>"]
 edition = "2018"
 
-[dev-dependencies]
-serialport = "3.3.0"
-
 [dependencies]
+sensor = { path = "../sensor" }
+connection = { path = "../connection" }

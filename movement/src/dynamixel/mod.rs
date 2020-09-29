@@ -1,27 +1,73 @@
+use connection::ConnectionHandler;
+use sensor::DataSensor;
 use std::collections::HashMap;
 
 pub mod protocol_one;
 
 // Extend this with protocol 2 packet
-pub enum PacketType {
+pub enum Packet {
     ProtocolOne(protocol_one::Packet),
 }
 
 pub enum Protocol {
-    ProtocolOne,
-    ProtocolTwo,
+    One,
+    Two,
+}
+
+pub enum ControlTableType {
+    Sensor,
+    ServoInformation,
+    Component,
+    Constraint,
+}
+
+pub enum AccessLevel {
+    Read,
+    Write,
+    ReadWrite,
+}
+
+/// All possible data units for the dynamixel, with a wrapped value that
+/// represents the power of 10 the unit is multiplied by (eg 10^2 cm for m)
+pub enum DataUnits {
+    Second(usize),
+    Pulse(usize),
+    RevolutionsPerMinute(usize),
+    DegreesCelcius(usize),
+    Volts(usize),
+    Percentage(usize),
+    Amps(usize),
+    Other(String),
+}
+
+pub struct ControlTableData {
+    pub address: u8,
+    pub size: u8,
+    pub description: Option<String>,
+    pub access: AccessLevel,
+    pub initial_value: Option<String>,
+    pub range: Option<(u8, u8)>,
+    pub units: Option<DataUnits>,
 }
 
 pub struct Dynamixel {
-    pub id: u8,
-    pub protocol: Protocol,
-    pub baudrate: usize,
-    pub control_table: HashMap<u8, u8>, // This needs to become its own proper data structure
-                                        /* Commenting these out until I figure out if they will be useful
-                                        last_packet: PacketType
-                                        sent_packets: Vec<u8>
-                                        */
+    pub connection_handler: Box<dyn ConnectionHandler>,
+    pub control_table: HashMap<String, ControlTableType>,
+    pub sensors: HashMap<String, Box<dyn DataSensor>>,
+    pub components: HashMap<String, ()>, // should become a custom datatype/enum
+    pub information: HashMap<String, ControlTableData>,
+    pub constraints: HashMap<String, ControlTableData>,
+    /* Commenting these out until I figure out if they will be useful
+    last_packet: PacketType
+    sent_packets: Vec<u8>
+    */
 }
+
+pub enum DynamixelMode {
+    Wheel,
+    Joint,
+}
+
 /*
 Note to future self:
 The control table should be populated with not just string associations,
@@ -33,3 +79,16 @@ There should be an enum with a few different kinds of items:
 - Component (led, alarm etc)
 - Constraint (cw limit, compliance margin)
 */
+
+// paramters should also include implementor of ConnectionHandler
+pub trait ProtocolOne {
+    fn ping(&mut self) -> Packet;
+    fn read(&self, address: u8) -> Packet;
+    fn write(&mut self, address: u8, value: u8) -> Packet;
+    fn register_write(&mut self, address: u8, value: u8) -> Packet;
+    fn action(&mut self) -> Packet;
+    fn reset(&mut self) -> Packet;
+    fn reboot(&mut self) -> Packet;
+    fn sync_write(&mut self, address: u8, value: u8) -> Packet;
+    fn bulk_read(&self) -> Vec<Packet>;
+}
