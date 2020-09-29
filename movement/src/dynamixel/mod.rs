@@ -3,19 +3,13 @@ use std::collections::HashMap;
 pub mod protocol_one;
 
 // Extend this with protocol 2 packet
-pub enum PacketProtocol {
+pub enum PacketType {
     ProtocolOne(protocol_one::Packet),
 }
 
 pub enum Protocol {
     ProtocolOne,
     ProtocolTwo,
-}
-
-pub trait ConnectionHandler {
-    fn write(packet: Vec<u8>) -> Result<std::io::Error, u8>;
-    fn read(buf: &mut Vec<u8>) -> Result<std::io::Error, ()>;
-    // flush?
 }
 
 pub struct Dynamixel {

@@ -1,5 +1,3 @@
-pub mod virtual_sensor;
-
 pub enum SensorType {
     Measurement,
     DataStream,
