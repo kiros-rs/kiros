@@ -71,6 +71,8 @@ pub enum StatusType {
 }
 
 impl StatusType {
+    /// Gets the numeric representation of an error code given the list of
+    /// errors
     pub fn get_error_code(errors: &Vec<StatusType>) -> u8 {
         let mut error_code = vec![0; 8];
 
@@ -96,6 +98,8 @@ impl StatusType {
         u8::from_str_radix(&bin_err, 2).unwrap()
     }
 
+    /// Gets the list of error types given a numeric representation of the
+    /// error
     pub fn get_error_types(error: &u8) -> Vec<StatusType> {
         let mut errors: Vec<StatusType> = vec![];
 
@@ -141,6 +145,7 @@ pub struct Packet {
 }
 
 impl Packet {
+    /// Calculates the checksum for the packet
     pub fn checksum(&self) -> u8 {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
@@ -172,6 +177,7 @@ impl Packet {
         }
     }
 
+    /// Creates a new protocol 1 packet
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         let mut packet = Packet {
             id,

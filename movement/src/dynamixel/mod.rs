@@ -4,16 +4,13 @@ use std::collections::HashMap;
 
 pub mod protocol_one;
 
-// Extend this with protocol 2 packet
+// Extend this with protocol 2 packet when implemented
 pub enum Packet {
     ProtocolOne(protocol_one::Packet),
 }
 
-pub enum Protocol {
-    One,
-    Two,
-}
-
+/// The abstract categories an item in the control table
+/// can be part of.
 pub enum ControlTableType {
     Sensor,
     ServoInformation,
@@ -21,12 +18,17 @@ pub enum ControlTableType {
     Constraint,
 }
 
+/// The levels of permission a user is granted in terms of an item in the
+/// control table.
 pub enum AccessLevel {
     Read,
     Write,
     ReadWrite,
 }
 
+/// A representation of an item in the control table, where only information
+/// is stored. When applicable, items in the control table are represented in
+/// this format, along with any optional data such as range or description.
 pub struct ControlTableData {
     pub address: u8,
     pub size: u8,
@@ -37,6 +39,19 @@ pub struct ControlTableData {
     pub units: Option<sensor::DataUnit>,
 }
 
+/// An abstract representation of a Dynamixel servo
+/// The servo contains the following basic types of data in its control table:
+/// - Sensor (temperature, voltage)
+/// - Servo Information (model, id)
+/// - Component (led, alarm)
+/// - Constraint (cw limit, max speed)
+/// The servo stores this abstracted representation of its control table
+/// within the aforementioned fields. Additionally, the structure stores
+/// an index of the control table (based on the data name column) to enable
+/// users to quickly locate a categorised item programmatically.
+///
+/// Finally, the Dynamixel structure stores a list of packets if the
+/// `collects_packets` boolean is set to true.
 pub struct Dynamixel {
     pub connection_handler: Box<dyn ConnectionHandler>,
     pub control_table: HashMap<String, ControlTableType>,
@@ -44,30 +59,21 @@ pub struct Dynamixel {
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
     pub information: HashMap<String, ControlTableData>,
     pub constraints: HashMap<String, ControlTableData>,
-    /* Commenting these out until I figure out if they will be useful
-    last_packet: PacketType
-    sent_packets: Vec<u8>
-    */
+    pub last_packet: Packet,
+    pub sent_packets: Vec<Packet>,
+    pub collects_packets: bool,
 }
 
+/// A Dynamixel can be either a wheel (CW & CCW limits set to 0) or a joint
+/// (CW or CCW limits nonzero). This enum contains a representation of these 2 states.
 pub enum DynamixelMode {
     Wheel,
     Joint,
 }
 
-/*
-Note to future self:
-The control table should be populated with not just string associations,
-but a more complex mapping between name & data stored.
-
-There should be an enum with a few different kinds of items:
-- Sensor (temperature, voltage etc)
-- Stored value (id, model etc)
-- Component (led, alarm etc)
-- Constraint (cw limit, compliance margin)
-*/
-
-// paramters should also include implementor of ConnectionHandler
+/// This trait exposes all functionality possessed by Protocol One servos. It
+/// is worth noting that bulk_read is only available to MX series servos, and
+/// all other models should produce an error when called.
 pub trait ProtocolOne {
     fn ping(&mut self) -> Packet;
     fn read(&self, address: u8) -> Packet;
@@ -77,5 +83,5 @@ pub trait ProtocolOne {
     fn reset(&mut self) -> Packet;
     fn reboot(&mut self) -> Packet;
     fn sync_write(&mut self, address: u8, value: u8) -> Packet;
-    fn bulk_read(&self) -> Vec<Packet>;
+    fn bulk_read(&self) -> Result<Vec<Packet>, String>;
 }
