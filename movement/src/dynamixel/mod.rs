@@ -27,19 +27,6 @@ pub enum AccessLevel {
     ReadWrite,
 }
 
-/// All possible data units for the dynamixel, with a wrapped value that
-/// represents the power of 10 the unit is multiplied by (eg 10^2 cm for m)
-pub enum DataUnits {
-    Second(usize),
-    Pulse(usize),
-    RevolutionsPerMinute(usize),
-    DegreesCelcius(usize),
-    Volts(usize),
-    Percentage(usize),
-    Amps(usize),
-    Other(String),
-}
-
 pub struct ControlTableData {
     pub address: u8,
     pub size: u8,
@@ -47,13 +34,13 @@ pub struct ControlTableData {
     pub access: AccessLevel,
     pub initial_value: Option<String>,
     pub range: Option<(u8, u8)>,
-    pub units: Option<DataUnits>,
+    pub units: Option<sensor::DataUnit>,
 }
 
 pub struct Dynamixel {
     pub connection_handler: Box<dyn ConnectionHandler>,
     pub control_table: HashMap<String, ControlTableType>,
-    pub sensors: HashMap<String, Box<dyn DataSensor>>,
+    pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
     pub information: HashMap<String, ControlTableData>,
     pub constraints: HashMap<String, ControlTableData>,
