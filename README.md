@@ -15,6 +15,8 @@ To compile the project, simply run `just build`, followed by the targets you wis
 - `linux`
 - `windows`
 - `mac`
+- `rpi` - Raspberry Pi model 2/3/4
+- `rpi-legacy` - Raspberry Pi model 0/1
 
 # Examples
 Soon....
