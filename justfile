@@ -63,7 +63,7 @@ build *targets:
           subprocess.run(['rustup', 'target', 'add', target], stderr=subprocess.DEVNULL, check=True)
 
           print(Colour.BOLD + Colour.BLUE + 'Compiling target' + Colour.END)
-          subprocess.run(['cargo', 'build', '--target', target], check=True)
+          subprocess.run(['cargo', 'build', '--target', target, '--release'], check=True)
 
   # Rustc has a feature-gated option for multiple targets at once (-Zmultitarget) which may be worth looking into
 
@@ -74,6 +74,8 @@ build *targets:
   echo "Operating system: {{os()}} ({{os_family()}})"
   echo "Commit: {{`git rev-parse --short HEAD`}} ({{`git rev-parse HEAD`}})"
   echo "Branch: {{`git rev-parse --abbrev-ref HEAD`}}"
+  echo "Cargo: {{`cargo version`}}"
+  echo "Rust: {{`rustc --version`}}"
 
 clean-build *targets:
   cargo clean
@@ -102,6 +104,11 @@ install-toolchain:
   cargo install cargo-outdated
   cargo install cargo-deny
   cargo install cargo-cache
+
+build-release:
+  just clean-build all
+  just doc
+# release: build-release
   
 # Add a script to release & publish latest version (with artifacts, tags etc)
 # Add a script that runs in CI
