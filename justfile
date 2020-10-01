@@ -82,7 +82,15 @@ doc:
   cargo doc
   @# When there is an mdbook it should compile that too
 
+# This should probably be used when running CI
+# Output the health status of the codebase
+health:
+  cargo outdated
+  cargo deny check
+  cargo cache
+
 # Add a script to release & publish latest version (with artifacts, tags etc)
 # Add a script that runs in CI
 # Add a script that runs all tests
 # Add a script that runs all benchmarks
+# Add a script that lints all code

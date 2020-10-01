@@ -3,6 +3,7 @@ name = "movement"
 version = "0.1.0"
 authors = ["Angus Finch <developer.finchie@gmail.com>"]
 edition = "2018"
+license = "MIT"
 
 [dependencies]
 sensor = { path = "../sensor" }
