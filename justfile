@@ -69,4 +69,8 @@ test:
 
 # Print the system info for use in a bug report
 @info:
-  echo "{{arch()}} machine running on {{os()}}"
+  echo "Please use the following data when preparing a bug report:"
+  echo "Architecture: {{arch()}}"
+  echo "Operating system: {{os()}} ({{os_family()}})"
+  echo "Commit: {{`git rev-parse --short HEAD`}} ({{`git rev-parse HEAD`}})"
+  echo "Branch: {{`git rev-parse --abbrev-ref HEAD`}}"
