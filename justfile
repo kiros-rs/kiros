@@ -74,3 +74,12 @@ test:
   echo "Operating system: {{os()}} ({{os_family()}})"
   echo "Commit: {{`git rev-parse --short HEAD`}} ({{`git rev-parse HEAD`}})"
   echo "Branch: {{`git rev-parse --abbrev-ref HEAD`}}"
+
+clean-build *targets:
+  cargo clean
+  just build {{targets}}
+
+# Compile all project documentation
+doc:
+  cargo doc
+  @# When there is an mdbook it should compile that too
