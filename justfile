@@ -8,6 +8,7 @@ lint:
   cargo fmt
   cargo fix --allow-dirty --allow-staged
 
+# Build the selected targets
 build *targets:
   #!/usr/bin/env python3
   import subprocess
@@ -64,9 +65,6 @@ build *targets:
 
   # Rustc has a feature-gated option for multiple targets at once (-Zmultitarget) which may be worth looking into
 
-test:
-  @echo "test"
-
 # Print the system info for use in a bug report
 @info:
   echo "Please use the following data when preparing a bug report:"
@@ -83,3 +81,8 @@ clean-build *targets:
 doc:
   cargo doc
   @# When there is an mdbook it should compile that too
+
+# Add a script to release & publish latest version (with artifacts, tags etc)
+# Add a script that runs in CI
+# Add a script that runs all tests
+# Add a script that runs all benchmarks
