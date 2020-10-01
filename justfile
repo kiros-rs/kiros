@@ -89,6 +89,17 @@ health:
   cargo deny check
   cargo cache
 
+# Install the KIROS development toolchain
+install-toolchain:
+  @if ! command -v rustup &> /dev/null; then \
+    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh; \
+  fi
+  rustup update
+
+  cargo install cargo-outdated
+  cargo install cargo-deny
+  cargo install cargo-cache
+  
 # Add a script to release & publish latest version (with artifacts, tags etc)
 # Add a script that runs in CI
 # Add a script that runs all tests
