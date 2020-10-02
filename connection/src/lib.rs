@@ -1,8 +1,12 @@
+pub mod usb;
+
 /// A generic API that exposes basic functionality from the method of
 /// connection to enable abstraction over the connection method
 pub trait ConnectionHandler {
-    fn write(&self, packet: Vec<u8>) -> Result<std::io::Error, u8>;
-    fn read(&self, buf: &mut Vec<u8>) -> Result<std::io::Error, ()>;
+    fn write(&mut self, packet: Vec<u8>) -> Result<usize, std::io::Error>;
+    fn read(&mut self, buf: &mut Vec<u8>) -> Result<usize, std::io::Error>;
+    // fn open(&mut self, port: &str, baudrate: usize) -> Result<Box<dyn ConnectionHandler>, String>; // This needs to have an abstract way of passing location (port, pins etc)
+    fn get_connection_type(&self) -> ConnectionType;
     // flush?
 }
 
