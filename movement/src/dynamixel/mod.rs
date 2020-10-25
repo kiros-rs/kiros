@@ -71,17 +71,59 @@ pub enum DynamixelMode {
     Joint,
 }
 
+/// Packets can either be addressed to a single Dynamixel or all dynamixels
+pub enum DynamixelID {
+    Broadcast,
+    ID(u8),
+}
+
+pub trait PacketCommunications {
+    fn write(data: Vec<u8>) -> Packet;
+    fn read() -> Packet;
+}
+
+impl PacketCommunications for Dynamixel {
+    fn write(data: Vec<u8>) -> Packet {
+        unimplemented!();
+    }
+    fn read() -> Packet {
+        unimplemented!();
+    }
+}
+
 /// This trait exposes all functionality possessed by Protocol One servos. It
 /// is worth noting that bulk_read is only available to MX series servos, and
 /// all other models should produce an error when called.
 pub trait ProtocolOne {
-    fn ping(&mut self) -> Packet;
-    fn read(&self, address: u8) -> Packet;
-    fn write(&mut self, address: u8, value: u8) -> Packet;
-    fn register_write(&mut self, address: u8, value: u8) -> Packet;
-    fn action(&mut self) -> Packet;
-    fn reset(&mut self) -> Packet;
-    fn reboot(&mut self) -> Packet;
-    fn sync_write(&mut self, address: u8, value: u8) -> Packet;
-    fn bulk_read(&self) -> Result<Vec<Packet>, String>;
+    fn ping(&mut self, id: DynamixelID) -> Packet;
+    // fn read(&self, address: u8) -> Packet;
+    // fn write(&mut self, address: u8, value: u8) -> Packet;
+    // fn register_write(&mut self, address: u8, value: u8) -> Packet;
+    // fn action(&mut self) -> Packet;
+    // fn reset(&mut self) -> Packet;
+    // fn reboot(&mut self) -> Packet;
+    // fn sync_write(&mut self, address: u8, value: u8) -> Packet;
+    // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
+}
+
+impl ProtocolOne for Dynamixel {
+    fn ping(&mut self, id: DynamixelID) -> Packet {
+        let dxl_id: u8 = match id {
+            DynamixelID::Broadcast => 0xFE,
+            DynamixelID::ID(val) => val,
+        };
+
+        let pck = protocol_one::Packet::new(dxl_id, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Ping), vec![]);
+        println!("{:?}", pck.generate());
+
+        Packet::ProtocolOne(pck)
+    }
+    // fn read(&self, address: u8) -> Packet;
+    // fn write(&mut self, address: u8, value: u8) -> Packet;
+    // fn register_write(&mut self, address: u8, value: u8) -> Packet;
+    // fn action(&mut self) -> Packet;
+    // fn reset(&mut self) -> Packet;
+    // fn reboot(&mut self) -> Packet;
+    // fn sync_write(&mut self, address: u8, value: u8) -> Packet;
+    // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
 }
