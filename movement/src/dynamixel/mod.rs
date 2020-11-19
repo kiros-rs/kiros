@@ -83,7 +83,7 @@ pub trait PacketCommunications {
 }
 
 impl PacketCommunications for Dynamixel {
-    fn write(data: Vec<u8>) -> Packet {
+    fn write(_data: Vec<u8>) -> Packet {
         unimplemented!();
     }
     fn read() -> Packet {
@@ -113,7 +113,11 @@ impl ProtocolOne for Dynamixel {
             DynamixelID::ID(val) => val,
         };
 
-        let pck = protocol_one::Packet::new(dxl_id, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Ping), vec![]);
+        let pck = protocol_one::Packet::new(
+            dxl_id,
+            protocol_one::PacketType::Instruction(protocol_one::InstructionType::Ping),
+            vec![],
+        );
         println!("{:?}", pck.generate());
 
         Packet::ProtocolOne(pck)
