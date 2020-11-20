@@ -1,4 +1,4 @@
-//! # Protocol 1
+//! # Dynamixel Protocol v1.0
 //! This file contains a collection of abstract representations used to
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
@@ -56,7 +56,7 @@ impl TryFrom<u8> for InstructionType {
 
 /// Represents the types of statuses that can be returned by a Dynamixel,
 /// as stored using each bit to represent a different error. For more info, see
-/// https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet
+/// <https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet>
 #[derive(Clone, Debug)]
 pub enum StatusType {
     // This needs work - maybe a Result to represent either success or failure?
@@ -183,10 +183,14 @@ impl Packet {
         // Convert all given parameters into little-endian format
         // Apparently some of the data is signed? need to investigate...
         let mut new_params: Vec<u8> = vec![];
+        let mut buf: Vec<u8> = vec![];
+
         for i in parameters.iter() {
-            new_params.write_u64::<LittleEndian>(*i).unwrap();
+            buf.write_u64::<LittleEndian>(*i).unwrap();
+            buf.retain(|i| *i != 0);
+            new_params.extend(buf);
+            buf = vec![];
         }
-        new_params.retain(|i| *i != 0);
 
         let mut packet = Packet {
             id,
