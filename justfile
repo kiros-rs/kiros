@@ -30,7 +30,7 @@ build *targets:
   if '{{targets}}' == '':
       print(Colour.BOLD + Colour.YELLOW + 'No target specified, building for local machine...'
             + Colour.END)
-      subprocess.run(['cargo', 'build'], check=True)
+      subprocess.run(['cargo', 'build', '--release'], check=True)
       sys.exit()
 
   TARGETS = {
