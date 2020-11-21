@@ -30,7 +30,7 @@ impl From<InstructionType> for u8 {
             InstructionType::Action => 5,
             InstructionType::Reset => 6,
             InstructionType::Reboot => 7,
-            InstructionType::SyncWrite => 8,
+            InstructionType::SyncWrite => 131,
             InstructionType::BulkRead => 9,
         }
     }
@@ -176,6 +176,19 @@ impl Packet {
         } else {
             Err("You cannot write a status packet to a servo!".to_string())
         }
+    }
+
+    pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
+        let mut packet = Packet {
+            id,
+            length: parameters.len() as u8 + 2u8,
+            packet_type,
+            parameters,
+            checksum: 0,
+        };
+
+        packet.checksum = packet.checksum();
+        packet
     }
 
     /// Creates a new protocol 1 packet
