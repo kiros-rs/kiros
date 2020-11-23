@@ -157,13 +157,13 @@ impl PacketManipulation for Packet {
             PacketType::Instruction(instruction) => u8::from(*instruction),
             PacketType::Status(statuses) => StatusType::get_error_code(statuses),
         } as usize;
-        
+
         let chk: u8 = if sum > 255 {
             (sum as u8) & 0xFF
         } else {
             sum as u8
         };
-        
+
         !chk
     }
 
@@ -174,7 +174,7 @@ impl PacketManipulation for Packet {
             let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
             packet.extend(&self.parameters);
             packet.push(self.checksum);
-            
+
             Ok(packet)
         } else {
             Err("You cannot write a status packet to a servo!".to_string())

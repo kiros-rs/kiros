@@ -14,5 +14,6 @@ pub fn connect_usb(path: &str, baudrate: u32) -> Box<dyn SerialPort> {
         .data_bits(serialport::DataBits::Eight)
         .stop_bits(serialport::StopBits::One)
         .parity(serialport::Parity::None)
-        .open().unwrap()
+        .open()
+        .unwrap()
 }

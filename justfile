@@ -6,13 +6,14 @@ _default:
 # Lint the entire codebase
 lint:
   cargo fmt
-  cargo fix --allow-dirty --allow-staged
+  cargo fix --allow-staged
 
 # Build the selected targets
 build *targets:
   #!/usr/bin/env python3
   import subprocess
   import sys
+  import os
 
   class Colour:
       PURPLE = '\033[95m'
@@ -30,7 +31,10 @@ build *targets:
   if '{{targets}}' == '':
       print(Colour.BOLD + Colour.YELLOW + 'No target specified, building for local machine...'
             + Colour.END)
-      subprocess.run(['cargo', 'build', '--release'], check=True)
+      if os.getenv('BUILD_MODE') == 'RELEASE':
+        subprocess.run(['cargo', 'build', '--release'], check=True)
+      else:
+        subprocess.run(['cargo', 'build'], check=True)
       sys.exit()
 
   TARGETS = {
@@ -63,7 +67,11 @@ build *targets:
           subprocess.run(['rustup', 'target', 'add', target], stderr=subprocess.DEVNULL, check=True)
 
           print(Colour.BOLD + Colour.BLUE + 'Compiling target' + Colour.END)
-          subprocess.run(['cargo', 'build', '--target', target, '--release'], check=True)
+          
+          if os.getenv('BUILD_MODE') == 'RELEASE':
+            subprocess.run(['cargo', 'build', '--target', target, '--release'], check=True)
+          else:
+            subprocess.run(['cargo', 'build', '--target', target], check=True)
 
   # Rustc has a feature-gated option for multiple targets at once (-Zmultitarget) which may be worth looking into
 
@@ -106,7 +114,7 @@ install-toolchain:
   cargo install cargo-cache
 
 build-release:
-  just clean-build all
+  BUILD_MODE=RELEASE just clean-build all
   just doc
 # release: build-release
   

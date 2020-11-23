@@ -1,5 +1,5 @@
-pub mod protocol_one;
 pub mod connection;
+pub mod protocol_one;
 
 // Extend this with protocol 2 packet when implemented
 pub enum Packet {
