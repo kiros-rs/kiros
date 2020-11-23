@@ -3,7 +3,7 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use byteorder::{LittleEndian, WriteBytesExt};
+use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::convert::TryFrom;
 
 /// Represents the types of instructions that can be sent to a Dynamixel.
@@ -194,15 +194,21 @@ impl Packet {
     /// Creates a new protocol 1 packet
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u64>) -> Packet {
         // Convert all given parameters into little-endian format
+        // Also determines the minimum amount of bytes needed to represent data
         // Apparently some of the data is signed? need to investigate...
+        // TODO: Add test to make sure the min-bytes functionality works
         let mut new_params: Vec<u8> = vec![];
-        let mut buf: Vec<u8> = vec![];
 
         for i in parameters.iter() {
-            buf.write_u64::<LittleEndian>(*i).unwrap();
-            buf.retain(|i| *i != 0);
-            new_params.extend(buf);
-            buf = vec![];
+            let mut write_buf: Vec<u8> = vec![];
+
+            write_buf.write_u64::<LittleEndian>(*i).unwrap();
+            for x in 1..write_buf.len() {
+                if LittleEndian::read_uint(&write_buf[0..x], x) == *i {
+                    new_params.extend(&write_buf[0..x]);
+                    break;
+                }
+            }
         }
 
         let mut packet = Packet {

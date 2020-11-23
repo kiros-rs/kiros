@@ -257,6 +257,7 @@ impl ProtocolOne for Dynamixel {
             vec![],
         ))
     }
+
     fn read(&self, address: u64, length: u64) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
@@ -264,6 +265,7 @@ impl ProtocolOne for Dynamixel {
             vec![address, length],
         ))
     }
+
     fn write(&self, address: u64, value: u64) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
@@ -271,6 +273,7 @@ impl ProtocolOne for Dynamixel {
             vec![address, value],
         ))
     }
+
     fn register_write(&self, address: u64, value: u64) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
@@ -278,6 +281,7 @@ impl ProtocolOne for Dynamixel {
             vec![address, value],
         ))
     }
+
     fn action(&self) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
@@ -285,6 +289,7 @@ impl ProtocolOne for Dynamixel {
             vec![],
         ))
     }
+
     fn reset(&self) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
@@ -292,6 +297,7 @@ impl ProtocolOne for Dynamixel {
             vec![],
         ))
     }
+
     fn reboot(&self) -> Packet {
         Packet::ProtocolOne(protocol_one::Packet::new(
             u8::from(self.get_id()),
