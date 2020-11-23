@@ -112,3 +112,9 @@ pub struct SyncPacket {
     pub data: u64,
     pub address: u8,
 }
+
+pub struct BulkReadPacket {
+    pub id: u8,
+    pub length: u8,
+    pub address: u8,
+}

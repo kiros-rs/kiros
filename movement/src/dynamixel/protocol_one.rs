@@ -33,7 +33,7 @@ impl From<InstructionType> for u8 {
             InstructionType::Reset => 6,
             InstructionType::Reboot => 7,
             InstructionType::SyncWrite => 131,
-            InstructionType::BulkRead => 9,
+            InstructionType::BulkRead => 146,
         }
     }
 }
@@ -49,8 +49,8 @@ impl TryFrom<u8> for InstructionType {
             5 => Ok(InstructionType::Action),
             6 => Ok(InstructionType::Reset),
             7 => Ok(InstructionType::Reboot),
-            8 => Ok(InstructionType::SyncWrite),
-            9 => Ok(InstructionType::BulkRead),
+            131 => Ok(InstructionType::SyncWrite),
+            146 => Ok(InstructionType::BulkRead),
             _ => Err("Unable to match out-of-range instruction!"),
         }
     }
@@ -73,6 +73,7 @@ pub enum StatusType {
     InputVoltage,
 }
 
+// TODO: Reimplement this using `byteorder` crate
 impl StatusType {
     /// Gets the numeric representation of an error code given the list of
     /// errors
@@ -170,7 +171,7 @@ impl Packet {
     /// to actually write to the servo, see the ConnectionHandler trait (TODO: LINK).
     pub fn generate(&self) -> Result<Vec<u8>, String> {
         if let PacketType::Instruction(instruction) = self.packet_type {
-            let mut packet = vec![255, 255, self.id, self.length, u8::from(instruction)];
+            let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
             packet.extend(&self.parameters);
             packet.push(self.checksum);
 
@@ -304,10 +305,9 @@ pub trait ProtocolOne {
     // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
 }
 
-// impl for any implementor of DynamixelInformation?
 impl ProtocolOne for super::Dynamixel {
     fn ping(&self) -> super::Packet {
-        let dxl_id = u8::from(self.get_id());
+        let dxl_id = self.get_id().into();
 
         super::Packet::ProtocolOne(Packet::new(
             dxl_id,
@@ -318,7 +318,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn read(&self, address: u64, length: u64) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::Read),
             vec![address, length],
         ))
@@ -326,7 +326,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn write(&self, address: u64, value: u64) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::Write),
             vec![address, value],
         ))
@@ -334,7 +334,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn register_write(&self, address: u64, value: u64) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::RegWrite),
             vec![address, value],
         ))
@@ -342,7 +342,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn action(&self) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::Action),
             vec![],
         ))
@@ -350,7 +350,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn reset(&self) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::Reset),
             vec![],
         ))
@@ -358,7 +358,7 @@ impl ProtocolOne for super::Dynamixel {
 
     fn reboot(&self) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
-            u8::from(self.get_id()),
+            self.get_id().into(),
             PacketType::Instruction(InstructionType::Reboot),
             vec![],
         ))
@@ -466,9 +466,49 @@ pub fn sync_write(
     }
 
     Ok(super::Packet::ProtocolOne(Packet::new_raw(
-        u8::from(super::DynamixelID::Broadcast),
+        super::DynamixelID::Broadcast.into(),
         PacketType::Instruction(InstructionType::SyncWrite),
         params,
     )))
 }
-// pub fn bulk_read(&self) -> Result<Vec<Packet>, String>;
+
+/// Creates a packet to read from multiple servos at once
+/// This function will return an error if multiple items in the `packets`
+/// vector contain the same ID.InstructionType
+///
+/// This function implements section [4.9](https://emanual.robotis.com/docs/en/dxl/protocol1/#bulk-read)
+/// ```
+/// use movement::dynamixel::{Dynamixel, DynamixelID, Packet, BulkReadPacket};
+/// use movement::dynamixel::protocol_one::{ProtocolOne, bulk_read};
+/// fn main() {
+///     let dxl = Dynamixel {
+///         id: DynamixelID::Broadcast,
+///     };
+///
+///     let packets: Vec<BulkReadPacket> = vec![BulkReadPacket{id: 1, length: 2, address: 30}, BulkReadPacket{id: 2, length: 2, address: 36}];
+///     let Packet::ProtocolOne(packet) = bulk_read(packets).unwrap();
+///     assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0xFE, 0x09, 0x92, 0x00, 0x02, 0x01, 0x1E, 0x02, 0x02, 0x24, 0x1D]);
+/// }
+pub fn bulk_read(packets: Vec<super::BulkReadPacket>) -> Result<super::Packet, String> {
+    let mut known_ids: Vec<u8> = vec![];
+    for i in packets.iter() {
+        if known_ids.contains(&i.id) {
+            return Err(String::from("Cannot address the same ID more than once!"));
+        }
+
+        known_ids.push(i.id);
+    }
+
+    let mut params: Vec<u64> = vec![0x00];
+    for i in packets.iter() {
+        params.push(i.length.into());
+        params.push(i.id.into());
+        params.push(i.address.into());
+    }
+
+    Ok(super::Packet::ProtocolOne(Packet::new(
+        super::DynamixelID::Broadcast.into(),
+        PacketType::Instruction(InstructionType::BulkRead),
+        params,
+    )))
+}
