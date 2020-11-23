@@ -1,7 +1,3 @@
-use connection::ConnectionHandler;
-use sensor::DataSensor;
-use std::collections::HashMap;
-
 pub mod protocol_one;
 
 // Extend this with protocol 2 packet when implemented
@@ -52,16 +48,20 @@ pub struct ControlTableData {
 ///
 /// Finally, the Dynamixel structure stores a list of packets if the
 /// `collects_packets` boolean is set to true.
+///
+/// Note that if you wish to broadcast to all servos, you will need to create
+/// an empty Dynamixel
 pub struct Dynamixel {
-    pub connection_handler: Box<dyn ConnectionHandler>,
-    pub control_table: HashMap<String, ControlTableType>,
-    pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
-    pub components: HashMap<String, ()>, // should become a custom datatype/enum
-    pub information: HashMap<String, ControlTableData>,
-    pub constraints: HashMap<String, ControlTableData>,
-    pub last_packet: Packet,
-    pub sent_packets: Vec<Packet>,
-    pub collects_packets: bool,
+    // pub connection_handler: Box<dyn ConnectionHandler>,
+    // pub control_table: HashMap<String, ControlTableType>,
+    // pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
+    // pub components: HashMap<String, ()>, // should become a custom datatype/enum
+    // pub information: HashMap<String, ControlTableData>,
+    // pub constraints: HashMap<String, ControlTableData>,
+    // pub last_packet: Packet,
+    // pub sent_packets: Vec<Packet>,
+    // pub collects_packets: bool,
+    pub id: DynamixelID, // This is a TEMPORARY fix
 }
 
 /// A Dynamixel can be either a wheel (CW & CCW limits set to 0) or a joint
@@ -71,17 +71,50 @@ pub enum DynamixelMode {
     Joint,
 }
 
-/// This trait exposes all functionality possessed by Protocol One servos. It
-/// is worth noting that bulk_read is only available to MX series servos, and
-/// all other models should produce an error when called.
-pub trait ProtocolOne {
-    fn ping(&mut self) -> Packet;
-    fn read(&self, address: u8) -> Packet;
-    fn write(&mut self, address: u8, value: u8) -> Packet;
-    fn register_write(&mut self, address: u8, value: u8) -> Packet;
-    fn action(&mut self) -> Packet;
-    fn reset(&mut self) -> Packet;
-    fn reboot(&mut self) -> Packet;
-    fn sync_write(&mut self, address: u8, value: u8) -> Packet;
-    fn bulk_read(&self) -> Result<Vec<Packet>, String>;
+/// Packets can either be addressed to a single Dynamixel or all dynamixels
+#[derive(Clone, Copy, PartialEq, Eq, Hash)] // TODO: Remove these derives
+pub enum DynamixelID {
+    Broadcast,
+    ID(u8),
+}
+
+// Consider using the num-traits crate to make this more broad?
+impl From<DynamixelID> for u8 {
+    fn from(item: DynamixelID) -> u8 {
+        match item {
+            DynamixelID::Broadcast => 0xFE,
+            DynamixelID::ID(id) => id,
+        }
+    }
+}
+
+pub trait PacketCommunications {
+    fn write(data: Vec<u8>) -> Packet;
+    fn read() -> Packet;
+}
+
+// Remove 'get' prefix?
+pub trait DynamixelInformation {
+    fn get_id(&self) -> DynamixelID;
+    // fn get_baudrate(&self) -> u64;
+}
+
+impl DynamixelInformation for Dynamixel {
+    fn get_id(&self) -> DynamixelID {
+        // Temporary until this can be properly implemented later
+        self.id
+    }
+}
+
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SyncPacket {
+    pub id: u8, // Cannot be DynamixelID enum as only non-broadcast IDs allowed
+    pub data: u64,
+    pub address: u8,
+}
+
+pub struct BulkReadPacket {
+    pub id: u8,
+    pub length: u8,
+    pub address: u8,
 }
