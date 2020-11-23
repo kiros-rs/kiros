@@ -1,21 +1,4 @@
-/// A generic API that exposes basic functionality from the method of
-/// connection to enable abstraction over the connection method
-pub trait ConnectionHandler {
-    /// Write a packet over the connection
-    fn write(&mut self, packet: Vec<u8>) -> Result<usize, std::io::Error>;
-    /// Read a packet over the connection
-    fn read(&mut self) -> Result<usize, std::io::Error>;
-    /// Connect & perform any initialisation required
-    fn connect(&mut self) -> Option<std::io::Error>;
-}
-
-/// Additional functionality available when accessing buffered connections
-pub trait BufferedConnectionHandler {
-    /// Flush the connection buffer
-    fn flush(&mut self);
-    /// Read a buffered packet over the connection
-    fn read(&mut self, buf: &mut Vec<u8>) -> Result<usize, std::io::Error>;
-}
+pub mod usb;
 
 /// An API to get basic connection info
 pub trait ConnectionInfo {

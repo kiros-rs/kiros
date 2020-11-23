@@ -3,7 +3,7 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use super::DynamixelInformation;
+use super::{DynamixelInformation, PacketManipulation};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -148,39 +148,41 @@ pub struct Packet {
     checksum: u8,
 }
 
-impl Packet {
+impl PacketManipulation for Packet {
     /// Calculates the checksum for the packet
-    pub fn checksum(&self) -> u8 {
+    fn checksum(&self) -> u8 {
         let mut sum = self.id as usize + self.length as usize;
         sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += match &self.packet_type {
             PacketType::Instruction(instruction) => u8::from(*instruction),
             PacketType::Status(statuses) => StatusType::get_error_code(statuses),
         } as usize;
-
+        
         let chk: u8 = if sum > 255 {
             (sum as u8) & 0xFF
         } else {
             sum as u8
         };
-
+        
         !chk
     }
 
     /// Provides packet-crafting functionality for servo communication. If you want
     /// to actually write to the servo, see the ConnectionHandler trait (TODO: LINK).
-    pub fn generate(&self) -> Result<Vec<u8>, String> {
+    fn generate(&self) -> Result<Vec<u8>, String> {
         if let PacketType::Instruction(instruction) = self.packet_type {
             let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
             packet.extend(&self.parameters);
             packet.push(self.checksum);
-
+            
             Ok(packet)
         } else {
             Err("You cannot write a status packet to a servo!".to_string())
         }
     }
+}
 
+impl Packet {
     pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         let mut packet = Packet {
             id,

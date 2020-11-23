@@ -1,4 +1,5 @@
 pub mod protocol_one;
+pub mod connection;
 
 // Extend this with protocol 2 packet when implemented
 pub enum Packet {
@@ -88,9 +89,10 @@ impl From<DynamixelID> for u8 {
     }
 }
 
-pub trait PacketCommunications {
-    fn write(data: Vec<u8>) -> Packet;
-    fn read() -> Packet;
+// TODO: Rename this to something better
+pub trait PacketManipulation {
+    fn checksum(&self) -> u8;
+    fn generate(&self) -> Result<Vec<u8>, String>;
 }
 
 // Remove 'get' prefix?
