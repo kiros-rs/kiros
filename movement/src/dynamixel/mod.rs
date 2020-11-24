@@ -1,5 +1,10 @@
-pub mod connection;
 pub mod protocol_one;
+pub mod servo_connection;
+
+use std::collections::HashMap;
+
+use sensor::DataSensor;
+use std::io::{Read, Write};
 
 // Extend this with protocol 2 packet when implemented
 pub enum Packet {
@@ -52,17 +57,42 @@ pub struct ControlTableData {
 ///
 /// Note that if you wish to broadcast to all servos, you will need to create
 /// an empty Dynamixel
-pub struct Dynamixel {
-    // pub connection_handler: Box<dyn ConnectionHandler>,
-    // pub control_table: HashMap<String, ControlTableType>,
-    // pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
-    // pub components: HashMap<String, ()>, // should become a custom datatype/enum
-    // pub information: HashMap<String, ControlTableData>,
-    // pub constraints: HashMap<String, ControlTableData>,
-    // pub last_packet: Packet,
-    // pub sent_packets: Vec<Packet>,
-    // pub collects_packets: bool,
-    pub id: DynamixelID, // This is a TEMPORARY fix
+pub struct Dynamixel<C: Read + Write> {
+    pub connection_handler: Box<C>,
+    pub control_table: HashMap<String, ControlTableType>,
+    pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
+    pub components: HashMap<String, ()>, // should become a custom datatype/enum
+    pub information: HashMap<String, ControlTableData>,
+    pub constraints: HashMap<String, ControlTableData>,
+    pub last_packet: Option<Packet>,
+    pub sent_packets: Vec<Packet>,
+    pub collects_packets: bool,
+}
+
+impl<C> Dynamixel<C>
+where
+    C: Read + Write,
+{
+    pub fn new(
+        connection_handler: Box<C>,
+        control_table: HashMap<String, ControlTableType>,
+        sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
+        information: HashMap<String, ControlTableData>,
+        constraints: HashMap<String, ControlTableData>,
+        collects_packets: bool,
+    ) -> Self {
+        Dynamixel {
+            connection_handler,
+            control_table,
+            sensors,
+            components: HashMap::new(),
+            information,
+            constraints,
+            last_packet: None,
+            sent_packets: vec![],
+            collects_packets,
+        }
+    }
 }
 
 /// A Dynamixel can be either a wheel (CW & CCW limits set to 0) or a joint
@@ -101,10 +131,14 @@ pub trait DynamixelInformation {
     // fn get_baudrate(&self) -> u64;
 }
 
-impl DynamixelInformation for Dynamixel {
+// return values should be wrappen in Option
+impl<C> DynamixelInformation for Dynamixel<C>
+where
+    C: Read + Write,
+{
     fn get_id(&self) -> DynamixelID {
         // Temporary until this can be properly implemented later
-        self.id
+        DynamixelID::ID(1)
     }
 }
 

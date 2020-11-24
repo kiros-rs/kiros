@@ -7,7 +7,7 @@ use super::{DynamixelInformation, PacketManipulation};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-
+use std::io::{Read, Write};
 /// Represents the types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
 pub enum InstructionType {
@@ -307,7 +307,10 @@ pub trait ProtocolOne {
     // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
 }
 
-impl ProtocolOne for super::Dynamixel {
+impl<C> ProtocolOne for super::Dynamixel<C>
+where
+    C: Read + Write,
+{
     fn ping(&self) -> super::Packet {
         let dxl_id = self.get_id().into();
 
@@ -417,8 +420,6 @@ impl ProtocolOne for super::Dynamixel {
 ///     );
 /// }
 /// ```
-// TODO: These functions below don't really belong to a single servo, consider
-// options for removing dependence on a single dynamixel
 pub fn sync_write(
     mut packets: Vec<super::SyncPacket>,
     bytesize: usize,
