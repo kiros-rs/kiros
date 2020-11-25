@@ -93,6 +93,22 @@ where
             collects_packets,
         }
     }
+
+    pub fn new_empty(
+        connection_handler: Box<C>
+    ) -> Self {
+        Dynamixel {
+            connection_handler,
+            control_table: HashMap::new(),
+            sensors: HashMap::new(),
+            components: HashMap::new(),
+            information: HashMap::new(),
+            constraints: HashMap::new(),
+            last_packet: None,
+            sent_packets: vec![],
+            collects_packets: false,
+        }
+    }
 }
 
 /// A Dynamixel can be either a wheel (CW & CCW limits set to 0) or a joint
@@ -121,7 +137,7 @@ impl From<DynamixelID> for u8 {
 
 // TODO: Rename this to something better
 pub trait PacketManipulation {
-    fn checksum(&self) -> u8;
+    fn checksum(id: &u8, length: &u8, parameters: &Vec<u8>, opcode: &u8) -> u8;
     fn generate(&self) -> Result<Vec<u8>, String>;
 }
 

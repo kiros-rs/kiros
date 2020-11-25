@@ -59,7 +59,7 @@ impl TryFrom<u8> for InstructionType {
 /// Represents the types of statuses that can be returned by a Dynamixel,
 /// as stored using each bit to represent a different error. For more info, see
 /// <https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet>
-#[derive(Clone, Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum StatusType {
     // This needs work - maybe a Result to represent either success or failure?
     // It should not be possible to have Success and Overload at the same time.
@@ -150,13 +150,10 @@ pub struct Packet {
 
 impl PacketManipulation for Packet {
     /// Calculates the checksum for the packet
-    fn checksum(&self) -> u8 {
-        let mut sum = self.id as usize + self.length as usize;
-        sum += self.parameters.iter().map(|i| *i as usize).sum::<usize>();
-        sum += match &self.packet_type {
-            PacketType::Instruction(instruction) => u8::from(*instruction),
-            PacketType::Status(statuses) => StatusType::get_error_code(statuses),
-        } as usize;
+    fn checksum(id: &u8, length: &u8, parameters: &Vec<u8>, opcode: &u8) -> u8 {
+        let mut sum = *id as usize + *length as usize;
+        sum += parameters.iter().map(|i| *i as usize).sum::<usize>();
+        sum += *opcode as usize;
 
         let chk: u8 = if sum > 255 {
             (sum as u8) & 0xFF
@@ -184,19 +181,34 @@ impl PacketManipulation for Packet {
 
 impl Packet {
     pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
-        let mut packet = Packet {
+        // This should be changed to a universal trait to improve ergonomics
+        let opcode = match packet_type {
+            PacketType::Instruction(inst) => u8::from(inst),
+            PacketType::Status(ref status) => StatusType::get_error_code(&status),
+        };
+        let checksum = Packet::checksum(&id, &(parameters.len() as u8 + 2u8), &parameters, &opcode);
+
+        let packet = Packet {
             id,
             length: parameters.len() as u8 + 2u8,
             packet_type,
             parameters,
-            checksum: 0,
+            checksum,
         };
 
-        packet.checksum = packet.checksum();
         packet
     }
 
     /// Creates a new protocol 1 packet
+    /// 
+    /// ```
+    /// use movement::dynamixel::{PacketManipulation, protocol_one};
+    /// 
+    /// fn main() {
+    ///     let pck = protocol_one::Packet::new(1, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Write), vec![25, 1]);
+    ///     assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
+    /// }
+    /// ```
     pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u64>) -> Packet {
         // Convert all given parameters into little-endian format
         // Also determines the minimum amount of bytes needed to represent data
@@ -216,16 +228,89 @@ impl Packet {
             }
         }
 
-        let mut packet = Packet {
+        // This should be changed to a universal trait to improve ergonomics
+        let opcode = match packet_type {
+            PacketType::Instruction(inst) => u8::from(inst),
+            PacketType::Status(ref status) => StatusType::get_error_code(&status),
+        };
+        let checksum = Packet::checksum(&id, &(parameters.len() as u8 + 2u8), &new_params, &opcode);
+
+        let packet = Packet {
             id,
             length: new_params.len() as u8 + 2u8,
             packet_type,
             parameters: new_params,
-            checksum: 0,
+            checksum,
         };
 
-        packet.checksum = packet.checksum();
         packet
+    }
+
+    /// Validates the packet, returning a string error if found
+    /// returns none when packet is valid
+    /// 
+    /// ```
+    /// use movement::dynamixel::{PacketManipulation, protocol_one};
+    /// 
+    /// fn main() {
+    ///     let mut pck = protocol_one::Packet::new(1, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Write), vec![25, 1]).generate().unwrap();
+    ///     assert!(protocol_one::Packet::validate_packet(&pck).is_none());
+    /// 
+    ///     // Break the packet >:)
+    ///     pck.push(0u8);
+    ///     assert!(protocol_one::Packet::validate_packet(&pck).is_some());
+    /// }
+    /// 
+    /// ```
+    pub fn validate_packet(packet: &Vec<u8>) -> Option<String> {
+        // Make sure packet is of valid length
+        if packet.len() < 7 {
+            return Some(String::from("Packet length must be at least 7!"));
+        }
+
+        // Make sure packet contains header
+        if packet[0..2] != [255, 255] {
+            return Some(String::from("Packet must contain valid header!"));
+        }
+
+        // Make sure packet length is valid
+        if packet[3] as usize != packet.len() - 4 {
+            return Some(String::from("Packet length must be valid!"))
+        }
+
+        // Make sure checksum is valid
+        if let [id, length, opcode] = packet.as_slice()[2..5] {
+            let parameters: Vec<u8> = packet[5..packet.len() - 1].to_vec();
+            let checksum = packet[packet.len() - 1];
+
+            if Packet::checksum(&id, &length, &parameters, &opcode) != checksum {
+                return Some(String::from("Checksum must be valid!"));
+            }
+        }
+
+        None
+    }
+
+    pub fn from_packet(packet: Vec<u8>) -> Result<Packet, String> {
+        match Packet::validate_packet(&packet) {
+            None => {
+                if let [id, length, err] = packet.as_slice()[2..5] {
+                    let parameters: Vec<u8> = packet[5..packet.len() - 1].to_vec();
+                    let checksum = packet[packet.len()];
+    
+                    Ok(Packet {
+                        id,
+                        length,
+                        packet_type: PacketType::Status(StatusType::get_error_types(&err)),
+                        parameters,
+                        checksum,
+                    })
+                } else {
+                    Err(String::from("Unkown error!"))
+                }
+            },
+            Some(e) => Err(e),
+        }
     }
 }
 
