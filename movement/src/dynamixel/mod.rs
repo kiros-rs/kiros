@@ -74,7 +74,7 @@ where
     C: Read + Write,
 {
     pub fn new(
-        connection_handler: Box<C>,
+        connection_handler: C,
         control_table: HashMap<String, ControlTableType>,
         sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
         information: HashMap<String, ControlTableData>,
@@ -82,7 +82,7 @@ where
         collects_packets: bool,
     ) -> Self {
         Dynamixel {
-            connection_handler,
+            connection_handler: Box::new(connection_handler),
             control_table,
             sensors,
             components: HashMap::new(),
@@ -94,11 +94,9 @@ where
         }
     }
 
-    pub fn new_empty(
-        connection_handler: Box<C>
-    ) -> Self {
+    pub fn new_empty(connection_handler: C) -> Self {
         Dynamixel {
-            connection_handler,
+            connection_handler: Box::new(connection_handler),
             control_table: HashMap::new(),
             sensors: HashMap::new(),
             components: HashMap::new(),

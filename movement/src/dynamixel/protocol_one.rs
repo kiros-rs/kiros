@@ -200,10 +200,10 @@ impl Packet {
     }
 
     /// Creates a new protocol 1 packet
-    /// 
+    ///
     /// ```
     /// use movement::dynamixel::{PacketManipulation, protocol_one};
-    /// 
+    ///
     /// fn main() {
     ///     let pck = protocol_one::Packet::new(1, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Write), vec![25, 1]);
     ///     assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
@@ -248,19 +248,19 @@ impl Packet {
 
     /// Validates the packet, returning a string error if found
     /// returns none when packet is valid
-    /// 
+    ///
     /// ```
     /// use movement::dynamixel::{PacketManipulation, protocol_one};
-    /// 
+    ///
     /// fn main() {
     ///     let mut pck = protocol_one::Packet::new(1, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Write), vec![25, 1]).generate().unwrap();
     ///     assert!(protocol_one::Packet::validate_packet(&pck).is_none());
-    /// 
+    ///
     ///     // Break the packet >:)
     ///     pck.push(0u8);
     ///     assert!(protocol_one::Packet::validate_packet(&pck).is_some());
     /// }
-    /// 
+    ///
     /// ```
     pub fn validate_packet(packet: &Vec<u8>) -> Option<String> {
         // Make sure packet is of valid length
@@ -275,7 +275,7 @@ impl Packet {
 
         // Make sure packet length is valid
         if packet[3] as usize != packet.len() - 4 {
-            return Some(String::from("Packet length must be valid!"))
+            return Some(String::from("Packet length must be valid!"));
         }
 
         // Make sure checksum is valid
@@ -297,7 +297,7 @@ impl Packet {
                 if let [id, length, err] = packet.as_slice()[2..5] {
                     let parameters: Vec<u8> = packet[5..packet.len() - 1].to_vec();
                     let checksum = packet[packet.len()];
-    
+
                     Ok(Packet {
                         id,
                         length,
@@ -308,7 +308,7 @@ impl Packet {
                 } else {
                     Err(String::from("Unkown error!"))
                 }
-            },
+            }
             Some(e) => Err(e),
         }
     }
@@ -353,7 +353,7 @@ pub trait ProtocolOne {
     ///
     /// This function implements section [4.3](https://emanual.robotis.com/docs/en/dxl/protocol1/#write)
     // TODO: Create doctest using working id() function
-    fn write(&self, address: u64, value: u64) -> super::Packet;
+    fn write(&mut self, address: u64, value: u64);
 
     /// Creates a packet to register a value to write to the dynamixel at a
     /// given address, returning the crafted packet
@@ -414,12 +414,14 @@ where
         ))
     }
 
-    fn write(&self, address: u64, value: u64) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
+    fn write(&mut self, address: u64, value: u64) {
+        let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Write),
             vec![address, value],
-        ))
+        );
+
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet)
     }
 
     fn register_write(&self, address: u64, value: u64) -> super::Packet {
@@ -562,7 +564,7 @@ pub fn sync_write(
 
 /// Creates a packet to read from multiple servos at once
 /// This function will return an error if multiple items in the `packets`
-/// vector contain the same ID.InstructionType
+/// vector contain the same ID.
 ///
 /// This function implements section [4.9](https://emanual.robotis.com/docs/en/dxl/protocol1/#bulk-read)
 /// ```
