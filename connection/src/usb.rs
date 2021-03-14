@@ -1,5 +1,6 @@
 use crate::{ConnectionInfo, ConnectionType, WiredConnectionType};
 use serialport::{SerialPort, TTYPort};
+use std::time::Duration;
 
 impl ConnectionInfo for TTYPort {
     fn get_connection_type(&self) -> ConnectionType {
@@ -14,6 +15,9 @@ pub fn connect_usb(path: &str, baudrate: u32) -> Box<dyn SerialPort> {
         .data_bits(serialport::DataBits::Eight)
         .stop_bits(serialport::StopBits::One)
         .parity(serialport::Parity::None)
+        .timeout(Duration::from_millis(5))
         .open()
         .unwrap()
 }
+
+// TODO: Function that creates vec of all available ports

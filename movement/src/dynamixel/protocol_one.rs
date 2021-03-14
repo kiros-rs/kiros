@@ -179,7 +179,41 @@ impl PacketManipulation for Packet {
     }
 }
 
+#[derive(Debug)]
+pub enum PacketReadError {
+    InvalidLength,
+    InvalidHeader,
+    InvalidChecksum,
+    InvalidInstruction,
+}
+
 impl Packet {
+    pub fn from_vec(vec: Vec<u8>, op: InstructionType) -> Result<Packet, PacketReadError> {
+        // Run any instruction-spectific checks
+        match op {
+            InstructionType::Ping => {
+                if vec.len() != 6 { return Err(PacketReadError::InvalidLength) }
+            },  
+            InstructionType::Read => {}
+            InstructionType::Write => {}
+            InstructionType::RegWrite => {}
+            InstructionType::Action => {}
+            InstructionType::Reset => {}
+            InstructionType::Reboot => {}
+            InstructionType::SyncWrite => {}
+            InstructionType::BulkRead => {}
+        };
+
+        if vec[0..2] != [0xFF, 0xFF] { return Err(PacketReadError::InvalidHeader) }
+        let (id, length, error) = (vec[2], vec[3], vec[4]);
+        let params: Vec<u8> = vec[5..vec.len() - 1].to_vec();
+        let chk = vec.last().unwrap();
+
+        if *chk != Packet::checksum(&id, &length, &params, &error) { return Err(PacketReadError::InvalidChecksum) }
+
+        Ok(Packet::new_raw(id, PacketType::Status(StatusType::get_error_types(&error)),params))
+    }
+
     pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
         // This should be changed to a universal trait to improve ergonomics
         let opcode = match packet_type {
@@ -246,7 +280,7 @@ impl Packet {
         packet
     }
 
-    /// Validates the packet, returning a string error if found
+     /// Validates the packet, returning a string error if found
     /// returns none when packet is valid
     ///
     /// ```
@@ -331,7 +365,7 @@ pub trait ProtocolOne {
     /// }
     ///
     /// ```
-    fn ping(&self) -> super::Packet;
+    fn ping(&mut self) -> super::Packet;
 
     /// Creates a packet to read from an address on the dynamixel, returning the crafted packet
     ///
@@ -396,14 +430,18 @@ impl<C> ProtocolOne for super::Dynamixel<C>
 where
     C: Read + Write,
 {
-    fn ping(&self) -> super::Packet {
+    fn ping(&mut self) -> super::Packet {
         let dxl_id = self.get_id().into();
-
-        super::Packet::ProtocolOne(Packet::new(
+        let packet = Packet::new(
             dxl_id,
             PacketType::Instruction(InstructionType::Ping),
             vec![],
-        ))
+        );
+
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
+        let raw_packet = super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
+
+        super::Packet::ProtocolOne(Packet::from_vec(raw_packet, InstructionType::Ping).unwrap())
     }
 
     fn read(&self, address: u64, length: u64) -> super::Packet {
@@ -421,7 +459,7 @@ where
             vec![address, value],
         );
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet)
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
     }
 
     fn register_write(&self, address: u64, value: u64) -> super::Packet {
