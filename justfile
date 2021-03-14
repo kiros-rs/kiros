@@ -5,8 +5,8 @@ _default:
 # supported
 # Lint the entire codebase
 lint:
-  cargo fmt
   cargo fix --allow-staged
+  cargo fmt
 
 # Build the selected targets
 build *targets:

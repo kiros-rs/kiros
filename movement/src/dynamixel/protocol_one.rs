@@ -188,15 +188,24 @@ pub enum PacketReadError {
 }
 
 impl Packet {
-    pub fn from_vec(vec: Vec<u8>, op: InstructionType, length: Option<usize>) -> Result<Packet, PacketReadError> {
+    pub fn from_vec(
+        vec: Vec<u8>,
+        op: InstructionType,
+        length: Option<usize>,
+    ) -> Result<Packet, PacketReadError> {
         // Run any instruction-spectific checks
         match op {
             InstructionType::Ping => {
-                if vec.len() != 6 { return Err(PacketReadError::InvalidLength) }
-            },  
+                if vec.len() != 6 {
+                    return Err(PacketReadError::InvalidLength);
+                }
+            }
             InstructionType::Read => {
-                if vec.len() != 6 + length.expect("Must pass length parameter for all applicable instructions!") {
-                    return Err(PacketReadError::InvalidLength)
+                if vec.len()
+                    != 6 + length
+                        .expect("Must pass length parameter for all applicable instructions!")
+                {
+                    return Err(PacketReadError::InvalidLength);
                 }
             }
             InstructionType::Write => {}
@@ -208,14 +217,22 @@ impl Packet {
             InstructionType::BulkRead => {}
         };
 
-        if vec[0..2] != [0xFF, 0xFF] { return Err(PacketReadError::InvalidHeader) }
+        if vec[0..2] != [0xFF, 0xFF] {
+            return Err(PacketReadError::InvalidHeader);
+        }
         let (id, length, error) = (vec[2], vec[3], vec[4]);
         let params: Vec<u8> = vec[5..vec.len() - 1].to_vec();
         let chk = vec.last().unwrap();
 
-        if *chk != Packet::checksum(&id, &length, &params, &error) { return Err(PacketReadError::InvalidChecksum) }
+        if *chk != Packet::checksum(&id, &length, &params, &error) {
+            return Err(PacketReadError::InvalidChecksum);
+        }
 
-        Ok(Packet::new_raw(id, PacketType::Status(StatusType::get_error_types(&error)),params))
+        Ok(Packet::new_raw(
+            id,
+            PacketType::Status(StatusType::get_error_types(&error)),
+            params,
+        ))
     }
 
     pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
@@ -284,7 +301,7 @@ impl Packet {
         packet
     }
 
-     /// Validates the packet, returning a string error if found
+    /// Validates the packet, returning a string error if found
     /// returns none when packet is valid
     ///
     /// ```
@@ -445,7 +462,8 @@ where
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
-        let raw_packet = super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
+        let raw_packet =
+            super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
 
         Packet::from_vec(raw_packet, InstructionType::Ping, None).unwrap()
     }
@@ -458,7 +476,10 @@ where
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
-        let raw_packet = super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6 + length as usize);
+        let raw_packet = super::servo_connection::read_exact_packet(
+            self.connection_handler.as_mut(),
+            6 + length as usize,
+        );
         Packet::from_vec(raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
     }
 
