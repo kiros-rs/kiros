@@ -188,13 +188,17 @@ pub enum PacketReadError {
 }
 
 impl Packet {
-    pub fn from_vec(vec: Vec<u8>, op: InstructionType) -> Result<Packet, PacketReadError> {
+    pub fn from_vec(vec: Vec<u8>, op: InstructionType, length: Option<usize>) -> Result<Packet, PacketReadError> {
         // Run any instruction-spectific checks
         match op {
             InstructionType::Ping => {
                 if vec.len() != 6 { return Err(PacketReadError::InvalidLength) }
             },  
-            InstructionType::Read => {}
+            InstructionType::Read => {
+                if vec.len() != 6 + length.expect("Must pass length parameter for all applicable instructions!") {
+                    return Err(PacketReadError::InvalidLength)
+                }
+            }
             InstructionType::Write => {}
             InstructionType::RegWrite => {}
             InstructionType::Action => {}
@@ -351,6 +355,7 @@ impl Packet {
 /// This trait exposes all functionality possessed by Protocol One servos. For
 /// more information, please refer to <https://emanual.robotis.com/docs/en/dxl/protocol1/#instruction-details>
 // TODO: Refactor doctests using fully-implemented API
+// TODO: Fix number sizes
 pub trait ProtocolOne {
     /// Creates a packet to ping the dynamixel, returning the crafted packet
     ///
@@ -365,7 +370,7 @@ pub trait ProtocolOne {
     /// }
     ///
     /// ```
-    fn ping(&mut self) -> super::Packet;
+    fn ping(&mut self) -> Packet;
 
     /// Creates a packet to read from an address on the dynamixel, returning the crafted packet
     ///
@@ -380,7 +385,7 @@ pub trait ProtocolOne {
     /// }
     ///
     /// ```
-    fn read(&self, address: u64, length: u64) -> super::Packet;
+    fn read(&mut self, address: u64, length: u64) -> Packet;
 
     /// Creates a packet to write a value to the dynamixel at a given address,
     /// returning the crafted packet
@@ -426,11 +431,12 @@ pub trait ProtocolOne {
     // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
 }
 
+// is it possible to turn this pattern into a macro?
 impl<C> ProtocolOne for super::Dynamixel<C>
 where
     C: Read + Write,
 {
-    fn ping(&mut self) -> super::Packet {
+    fn ping(&mut self) -> Packet {
         let dxl_id = self.get_id().into();
         let packet = Packet::new(
             dxl_id,
@@ -441,15 +447,19 @@ where
         super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
         let raw_packet = super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
 
-        super::Packet::ProtocolOne(Packet::from_vec(raw_packet, InstructionType::Ping).unwrap())
+        Packet::from_vec(raw_packet, InstructionType::Ping, None).unwrap()
     }
 
-    fn read(&self, address: u64, length: u64) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
+    fn read(&mut self, address: u64, length: u64) -> Packet {
+        let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Read),
             vec![address, length],
-        ))
+        );
+
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
+        let raw_packet = super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6 + length as usize);
+        Packet::from_vec(raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
     }
 
     fn write(&mut self, address: u64, value: u64) {
