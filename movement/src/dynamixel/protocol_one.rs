@@ -8,7 +8,8 @@ use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{Read, Write};
-/// Represents the types of instructions that can be sent to a Dynamixel.
+
+/// The types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
 pub enum InstructionType {
     Ping,
@@ -56,8 +57,8 @@ impl TryFrom<u8> for InstructionType {
     }
 }
 
-/// Represents the types of statuses that can be returned by a Dynamixel,
-/// as stored using each bit to represent a different error. For more info, see
+/// The types of statuses that can be returned by a Dynamixel, as stored
+/// with each bit representing a different error. For more info, see
 /// <https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet>
 #[derive(Clone, Copy, Debug)]
 pub enum StatusType {
@@ -102,8 +103,7 @@ impl StatusType {
         u8::from_str_radix(&bin_err, 2).unwrap()
     }
 
-    /// Gets the list of error types given a numeric representation of the
-    /// error
+    /// Gets the list of error types given a numeric representation of the error
     pub fn get_error_types(error: &u8) -> Vec<StatusType> {
         let mut errors: Vec<StatusType> = vec![];
 
@@ -130,7 +130,7 @@ impl StatusType {
     }
 }
 
-/// Represents the different kinds of values that can be stored in the packet's
+/// The different kinds of values that can be stored in the packet's
 /// error/instruction column.
 #[derive(Clone, Debug)]
 pub enum PacketType {
@@ -138,7 +138,7 @@ pub enum PacketType {
     Status(Vec<StatusType>),
 }
 
-/// Reresents either an outgoing or incoming packet.
+/// An abstraction of incoming/outgoing packets
 #[derive(Clone, Debug)]
 pub struct Packet {
     pub id: u8,

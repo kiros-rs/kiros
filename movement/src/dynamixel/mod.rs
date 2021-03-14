@@ -7,6 +7,7 @@ use sensor::DataSensor;
 use std::io::{Read, Write};
 
 // Extend this with protocol 2 packet when implemented
+/// A protocol-agnostic representation of a Dynamixel packet
 pub enum Packet {
     ProtocolOne(protocol_one::Packet),
 }
@@ -73,6 +74,7 @@ impl<C> Dynamixel<C>
 where
     C: Read + Write,
 {
+    /// Create a new Dynamixel servo
     pub fn new(
         connection_handler: C,
         control_table: HashMap<String, ControlTableType>,
@@ -94,6 +96,7 @@ where
         }
     }
 
+    // HACK: Should be removed when sensors are completed
     pub fn new_empty(connection_handler: C) -> Self {
         Dynamixel {
             connection_handler: Box::new(connection_handler),
@@ -109,8 +112,9 @@ where
     }
 }
 
-/// A Dynamixel can be either a wheel (CW & CCW limits set to 0) or a joint
-/// (CW or CCW limits nonzero). This enum contains a representation of these 2 states.
+/// A representation of the 2 movement states a Dynamixel can be in:
+/// - Wheel
+/// - Joint
 pub enum DynamixelMode {
     Wheel,
     Joint,
@@ -156,6 +160,7 @@ where
     }
 }
 
+/// A packet used to address the same instruction to a group of servos
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SyncPacket {
     pub id: u8, // Cannot be DynamixelID enum as only non-broadcast IDs allowed
@@ -163,6 +168,7 @@ pub struct SyncPacket {
     pub address: u8,
 }
 
+/// A packet used to read from multiple servos at the same time (MX series only)
 pub struct BulkReadPacket {
     pub id: u8,
     pub length: u8,
