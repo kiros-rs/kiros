@@ -74,14 +74,13 @@ pub enum StatusType {
     InputVoltage,
 }
 
-// TODO: Reimplement this using `byteorder` crate
 impl StatusType {
     /// Gets the numeric representation of an error code given the list of
     /// errors
     pub fn get_error_code(errors: &Vec<StatusType>) -> u8 {
-        let mut error_code = vec![0; 8];
+        let mut error_code = 0u8;
 
-        for err in errors.iter() {
+        for err in errors {
             let index = match err {
                 StatusType::Success => return 0,
                 StatusType::Instruction => 1,
@@ -93,22 +92,22 @@ impl StatusType {
                 StatusType::InputVoltage => 7,
             };
 
-            error_code[index] = 1;
+            if index != 0 {
+                error_code |= 1 << index;
+            } else {
+                return 0
+            }
         }
 
-        let bin_err = error_code
-            .into_iter()
-            .map(|i| i.to_string())
-            .collect::<String>();
-        u8::from_str_radix(&bin_err, 2).unwrap()
+        error_code
     }
 
     /// Gets the list of error types given a numeric representation of the error
     pub fn get_error_types(error: &u8) -> Vec<StatusType> {
         let mut errors: Vec<StatusType> = vec![];
 
-        for (i, c) in format!("{:0>8b}", error).chars().enumerate() {
-            if c == '1' {
+        for i in 0..8 {
+            if error & (1 << i) != 0 {
                 let error_type: Option<StatusType> = match i {
                     1 => Some(StatusType::Instruction),
                     2 => Some(StatusType::Overload),
@@ -120,8 +119,8 @@ impl StatusType {
                     _ => None,
                 };
 
-                if error_type.is_some() {
-                    errors.push(error_type.unwrap());
+                if let Some(e) = error_type {
+                    errors.push(e);
                 }
             }
         }
@@ -151,7 +150,7 @@ pub struct Packet {
 impl PacketManipulation for Packet {
     /// Calculates the checksum for the packet
     fn checksum(id: &u8, length: &u8, parameters: &Vec<u8>, opcode: &u8) -> u8 {
-        let mut sum = *id as usize + *length as usize;
+        let mut sum: usize = *id as usize + *length as usize;
         sum += parameters.iter().map(|i| *i as usize).sum::<usize>();
         sum += *opcode as usize;
 
@@ -191,7 +190,7 @@ impl Packet {
     pub fn from_vec(
         vec: Vec<u8>,
         op: InstructionType,
-        length: Option<usize>,
+        length: Option<usize>, // This paramater could probably be improved
     ) -> Result<Packet, PacketReadError> {
         // Run any instruction-spectific checks
         match op {
@@ -217,13 +216,17 @@ impl Packet {
             InstructionType::BulkRead => {}
         };
 
+        // Validate header
         if vec[0..2] != [0xFF, 0xFF] {
             return Err(PacketReadError::InvalidHeader);
         }
+
+        // Extract packet data
         let (id, length, error) = (vec[2], vec[3], vec[4]);
         let params: Vec<u8> = vec[5..vec.len() - 1].to_vec();
         let chk = vec.last().unwrap();
 
+        // Validate checksum
         if *chk != Packet::checksum(&id, &length, &params, &error) {
             return Err(PacketReadError::InvalidChecksum);
         }
@@ -257,10 +260,11 @@ impl Packet {
     /// Creates a new protocol 1 packet
     ///
     /// ```
-    /// use movement::dynamixel::{PacketManipulation, protocol_one};
+    /// use movement::dynamixel::PacketManipulation;
+    /// use movement::dynamixel::protocol_one::{Packet, PacketType, InstructionType};
     ///
     /// fn main() {
-    ///     let pck = protocol_one::Packet::new(1, protocol_one::PacketType::Instruction(protocol_one::InstructionType::Write), vec![25, 1]);
+    ///     let pck = Packet::new(1, PacketType::Instruction(InstructionType::Write), vec![25, 1]);
     ///     assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
     /// }
     /// ```
@@ -335,14 +339,14 @@ pub trait ProtocolOne {
     /// }
     ///
     /// ```
-    fn read(&mut self, address: u64, length: u64) -> Packet;
+    fn read(&mut self, address: u8, length: u64) -> Packet;
 
     /// Creates a packet to write a value to the dynamixel at a given address,
     /// returning the crafted packet
     ///
     /// This function implements section [4.3](https://emanual.robotis.com/docs/en/dxl/protocol1/#write)
     // TODO: Create doctest using working id() function
-    fn write(&mut self, address: u64, value: u64);
+    fn write(&mut self, address: u8, value: u64);
 
     /// Creates a packet to register a value to write to the dynamixel at a
     /// given address, returning the crafted packet
@@ -358,7 +362,7 @@ pub trait ProtocolOne {
     /// }
     ///
     /// ```
-    fn register_write(&self, address: u64, value: u64) -> super::Packet;
+    fn register_write(&self, address: u8, value: u64) -> super::Packet;
 
     /// Creates a packet to action the registered value change, returning the
     /// crafted packet
@@ -401,11 +405,11 @@ where
         Packet::from_vec(raw_packet, InstructionType::Ping, None).unwrap()
     }
 
-    fn read(&mut self, address: u64, length: u64) -> Packet {
+    fn read(&mut self, address: u8, length: u64) -> Packet {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Read),
-            vec![address, length],
+            vec![address.into(), length],
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
@@ -416,21 +420,21 @@ where
         Packet::from_vec(raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
     }
 
-    fn write(&mut self, address: u64, value: u64) {
+    fn write(&mut self, address: u8, value: u64) {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Write),
-            vec![address, value],
+            vec![address.into(), value],
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
     }
 
-    fn register_write(&self, address: u64, value: u64) -> super::Packet {
+    fn register_write(&self, address: u8, value: u64) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::RegWrite),
-            vec![address, value],
+            vec![address.into(), value],
         ))
     }
 
