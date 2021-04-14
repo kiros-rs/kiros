@@ -6,6 +6,8 @@ use std::collections::HashMap;
 use sensor::DataSensor;
 use std::io::{Read, Write};
 
+use byteorder::{LittleEndian, WriteBytesExt};
+
 // Extend this with protocol 2 packet when implemented
 /// A protocol-agnostic representation of a Dynamixel packet
 pub enum Packet {
@@ -174,3 +176,65 @@ pub struct BulkReadPacket {
     pub length: u8,
     pub address: u8,
 }
+
+// TODO: convert this into a procedural macro that parses the enum and removes need for macro calls
+#[macro_export]
+macro_rules! impl_to_databytes {
+    ($t: ty, $enum:ident $(:: $enum_path:ident)*) => {
+        impl From<$t> for DataBytes {
+            fn from(num: $t) -> DataBytes {
+                $enum $(:: $enum_path)* (num)
+            }
+        }
+    };
+}
+
+#[derive(Debug)]
+pub enum DataBytes {
+    One(u8),
+    OneSigned(i8),
+    Two(u16),
+    TwoSigned(i16),
+    Four(u32),
+    FourSigned(i32),
+}
+
+// This should also be incorporated into the proc macro
+impl From<DataBytes> for Vec<u8> {
+    fn from(bytes: DataBytes) -> Vec<u8> {
+        let mut buf: Vec<u8> = Vec::new();
+        match bytes {
+            DataBytes::One(n) => buf.write_u8(n).unwrap(),
+            DataBytes::OneSigned(n) => buf.write_i8(n).unwrap(),
+            DataBytes::Two(n) => buf.write_u16::<LittleEndian>(n).unwrap(),
+            DataBytes::TwoSigned(n) => buf.write_i16::<LittleEndian>(n).unwrap(),
+            DataBytes::Four(n) => buf.write_u32::<LittleEndian>(n).unwrap(),
+            DataBytes::FourSigned(n) => buf.write_i32::<LittleEndian>(n).unwrap(),
+        }
+
+        buf
+    }
+}
+
+// impl From<&DataBytes> for Vec<u8> {
+//     fn from(bytes: &DataBytes) -> Vec<u8> {
+//         let mut buf: Vec<u8> = Vec::new();
+//         match bytes {
+//             DataBytes::One(n) => buf.write_u8(*n).unwrap(),
+//             DataBytes::OneSigned(n) => buf.write_i8(*n).unwrap(),
+//             DataBytes::Two(n) => buf.write_u16::<LittleEndian>(*n).unwrap(),
+//             DataBytes::TwoSigned(n) => buf.write_i16::<LittleEndian>(*n).unwrap(),
+//             DataBytes::Four(n) => buf.write_u32::<LittleEndian>(*n).unwrap(),
+//             DataBytes::FourSigned(n) => buf.write_i32::<LittleEndian>(*n).unwrap(),
+//         }
+
+//         buf
+//     }
+// }
+
+impl_to_databytes!(u8, DataBytes::One);
+impl_to_databytes!(i8, DataBytes::OneSigned);
+impl_to_databytes!(u16, DataBytes::Two);
+impl_to_databytes!(i16, DataBytes::TwoSigned);
+impl_to_databytes!(u32, DataBytes::Four);
+impl_to_databytes!(i32, DataBytes::FourSigned);

@@ -95,7 +95,7 @@ impl StatusType {
             if index != 0 {
                 error_code |= 1 << index;
             } else {
-                return 0
+                return 0;
             }
         }
 
