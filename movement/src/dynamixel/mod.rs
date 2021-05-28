@@ -2,11 +2,10 @@ pub mod protocol_one;
 pub mod servo_connection;
 
 use std::collections::HashMap;
-
 use sensor::DataSensor;
 use std::io::{Read, Write};
-
 use byteorder::{LittleEndian, WriteBytesExt};
+use num_traits::Num;
 
 // Extend this with protocol 2 packet when implemented
 /// A protocol-agnostic representation of a Dynamixel packet
@@ -31,17 +30,28 @@ pub enum AccessLevel {
     ReadWrite,
 }
 
+pub enum ModbusByte {
+    Low,
+    High,
+}
+
+pub struct ModbusAddress {
+    pub address: usize,
+    pub byte: Option<ModbusByte>,
+}
+
 /// A representation of an item in the control table, where only information
 /// is stored. When applicable, items in the control table are represented in
 /// this format, along with any optional data such as range or description.
-pub struct ControlTableData {
-    pub address: u8,
-    pub size: u8,
+pub struct ControlTableData<T> {
+    pub address: T,
+    pub size: T,
     pub description: Option<String>,
     pub access: AccessLevel,
     pub initial_value: Option<String>,
-    pub range: Option<(u8, u8)>,
+    pub range: Option<(T, T)>,
     pub units: Option<sensor::DataUnit>,
+    pub modbus: Option<ModbusAddress>,
 }
 
 /// An abstract representation of a Dynamixel servo
@@ -60,29 +70,30 @@ pub struct ControlTableData {
 ///
 /// Note that if you wish to broadcast to all servos, you will need to create
 /// an empty Dynamixel
-pub struct Dynamixel<C: Read + Write> {
+pub struct Dynamixel<C: Read + Write, T: Num> {
     pub connection_handler: Box<C>,
     pub control_table: HashMap<String, ControlTableType>,
     pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
-    pub information: HashMap<String, ControlTableData>,
-    pub constraints: HashMap<String, ControlTableData>,
+    pub information: HashMap<String, ControlTableData<T>>,
+    pub constraints: HashMap<String, ControlTableData<T>>,
     pub last_packet: Option<Packet>,
     pub sent_packets: Vec<Packet>,
     pub collects_packets: bool,
 }
 
-impl<C> Dynamixel<C>
+impl<C, T> Dynamixel<C, T>
 where
     C: Read + Write,
+    T: Num,
 {
     /// Create a new Dynamixel servo
     pub fn new(
         connection_handler: C,
         control_table: HashMap<String, ControlTableType>,
         sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
-        information: HashMap<String, ControlTableData>,
-        constraints: HashMap<String, ControlTableData>,
+        information: HashMap<String, ControlTableData<T>>,
+        constraints: HashMap<String, ControlTableData<T>>,
         collects_packets: bool,
     ) -> Self {
         Dynamixel {
@@ -97,8 +108,13 @@ where
             collects_packets,
         }
     }
+}
 
-    // HACK: Should be removed when sensors are completed
+// HACK: Should be removed when sensors are completed
+impl<C> Dynamixel<C, u8>
+where
+    C: Read + Write
+{
     pub fn new_empty(connection_handler: C) -> Self {
         Dynamixel {
             connection_handler: Box::new(connection_handler),
@@ -152,9 +168,10 @@ pub trait DynamixelInformation {
 }
 
 // return values should be wrappen in Option
-impl<C> DynamixelInformation for Dynamixel<C>
+impl<C, T> DynamixelInformation for Dynamixel<C, T>
 where
     C: Read + Write,
+    T: Num,
 {
     fn get_id(&self) -> DynamixelID {
         // Temporary until this can be properly implemented later

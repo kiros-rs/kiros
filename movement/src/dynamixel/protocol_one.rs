@@ -8,6 +8,7 @@ use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{Read, Write};
+use num_traits::Num;
 
 /// The types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
@@ -386,9 +387,10 @@ pub trait ProtocolOne {
 }
 
 // is it possible to turn this pattern into a macro?
-impl<C> ProtocolOne for super::Dynamixel<C>
+impl<C, T> ProtocolOne for super::Dynamixel<C, T>
 where
     C: Read + Write,
+    T: Num,
 {
     fn ping(&mut self) -> Packet {
         let dxl_id = self.get_id().into();
