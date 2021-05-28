@@ -6,6 +6,7 @@ use sensor::DataSensor;
 use std::io::{Read, Write};
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_traits::Num;
+use serde::{Serialize, Deserialize};
 
 // Extend this with protocol 2 packet when implemented
 /// A protocol-agnostic representation of a Dynamixel packet
@@ -24,17 +25,20 @@ pub enum ControlTableType {
 
 /// The levels of permission a user is granted in terms of an item in the
 /// control table.
+#[derive(Serialize, Deserialize, Debug)]
 pub enum AccessLevel {
     Read,
     Write,
     ReadWrite,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub enum ModbusByte {
     Low,
     High,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ModbusAddress {
     pub address: usize,
     pub byte: Option<ModbusByte>,
@@ -43,6 +47,7 @@ pub struct ModbusAddress {
 /// A representation of an item in the control table, where only information
 /// is stored. When applicable, items in the control table are represented in
 /// this format, along with any optional data such as range or description.
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ControlTableData<T> {
     pub address: T,
     pub size: T,

@@ -1,5 +1,9 @@
 pub mod numeric_sensor;
+
+use serde::{Serialize, Deserialize};
+
 /// A representation of all common units of data that may be processed
+#[derive(Serialize, Deserialize, Debug)]
 pub enum DataUnit {
     Second,
     Pulse,
