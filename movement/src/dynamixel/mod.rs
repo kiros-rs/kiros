@@ -46,10 +46,11 @@ pub struct ModbusAddress {
 pub struct ControlTableData<T> {
     pub address: T,
     pub size: T,
+    pub data_name: Option<String>,
     pub description: Option<String>,
     pub access: AccessLevel,
     pub initial_value: Option<String>,
-    pub range: Option<(T, T)>,
+    pub range: Option<(T, T)>, // There might be an actual range struct
     pub units: Option<sensor::DataUnit>,
     pub modbus: Option<ModbusAddress>,
 }
