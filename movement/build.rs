@@ -10,11 +10,13 @@ fn main() {
 
     writeln!(
         &mut file,
-         "use movement::dynamixel::{{AccessLevel, ControlTableData}};\n\
+        "use movement::dynamixel::{{AccessLevel, ControlTableData, DynamixelAddress}};\n\
          static DYNAMIXELS: phf::Map<&'static str, ControlTableData<u8>> = \n{};\n",
-         phf_codegen::Map::new()
-             .entry("test", "ControlTableData {
-                address: 1,
+        phf_codegen::Map::new()
+            .entry(
+                "test",
+                "ControlTableData {
+                address: DynamixelAddress::Standard(1),
                 size: 1,
                 data_name: None,
                 description: None,
@@ -23,7 +25,9 @@ fn main() {
                 range: None,
                 units: None,
                 modbus: None,
-            }")
-             .build()
-    ).unwrap();
+            }"
+            )
+            .build()
+    )
+    .unwrap();
 }

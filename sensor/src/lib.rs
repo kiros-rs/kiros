@@ -1,6 +1,6 @@
 pub mod numeric_sensor;
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
 /// A representation of all common units of data that may be processed
 #[derive(Serialize, Deserialize, Debug)]

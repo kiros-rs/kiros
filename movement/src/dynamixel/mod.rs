@@ -1,12 +1,12 @@
 pub mod protocol_one;
 pub mod servo_connection;
 
-use std::collections::HashMap;
-use sensor::DataSensor;
-use std::io::{Read, Write};
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_traits::Num;
-use serde::{Serialize, Deserialize};
+use sensor::DataSensor;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::io::{Read, Write};
 
 // Extend this with protocol 2 packet when implemented
 /// A protocol-agnostic representation of a Dynamixel packet
@@ -44,12 +44,18 @@ pub struct ModbusAddress {
     pub byte: Option<ModbusByte>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub enum DynamixelAddress<T> {
+    Standard(T),
+    Modbus(T),
+}
+
 /// A representation of an item in the control table, where only information
 /// is stored. When applicable, items in the control table are represented in
 /// this format, along with any optional data such as range or description.
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ControlTableData<T> {
-    pub address: T,
+    pub address: DynamixelAddress<T>,
     pub size: T,
     pub data_name: Option<String>,
     pub description: Option<String>,
@@ -119,7 +125,7 @@ where
 // HACK: Should be removed when sensors are completed
 impl<C> Dynamixel<C, u8>
 where
-    C: Read + Write
+    C: Read + Write,
 {
     pub fn new_empty(connection_handler: C) -> Self {
         Dynamixel {

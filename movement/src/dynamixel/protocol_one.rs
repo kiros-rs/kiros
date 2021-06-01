@@ -5,10 +5,10 @@
 
 use super::{DynamixelInformation, PacketManipulation};
 use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
+use num_traits::Num;
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use std::io::{Read, Write};
-use num_traits::Num;
 
 /// The types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
