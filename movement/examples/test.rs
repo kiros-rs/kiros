@@ -1,11 +1,15 @@
 use phf;
-use serde_yaml;
+use ron::de::from_str;
+
+use movement::dynamixel::{AccessLevel, ControlTableData, DynamixelAddress};
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 fn main() {
-    let dxl: &ControlTableData<u8> = DYNAMIXELS.get("test").unwrap();
-    println!("{:?}", DYNAMIXELS.get("test").unwrap());
-    let servos = vec![dxl];
-    println!("{}", serde_yaml::to_string(&servos).unwrap());
+    let dxl: &str = DYNAMIXELS.get("ax-12a").unwrap();
+    let data = from_str::<'_, Vec<ControlTableData<u64>>>(dxl).unwrap();
+
+    for line in data {
+        println!("{:?}", line.data_name);
+    }
 }

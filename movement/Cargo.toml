@@ -15,5 +15,10 @@ phf = "0.8.0"
 serde = {version = "1.0.126", features = ["derive"]}
 serde_yaml = "0.8.17"
 
+[dev-dependencies]
+ron = "0.6.4"
+
 [build-dependencies]
 phf_codegen = "0.8.0"
+walkdir = "2.3.2"
+serde = {version = "1.0.126", features = ["derive"]}
