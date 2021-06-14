@@ -19,9 +19,7 @@ impl Read for VirtualConnection {
         match self.mode {
             VirtualMode::Constant(val) => {
                 let bytes = val.to_le_bytes();
-                for i in 0..bytes.len() {
-                    buf[i] = bytes[i]
-                }
+                buf[..bytes.len()].clone_from_slice(&bytes[..]);
             }
             _ => todo!(),
         }

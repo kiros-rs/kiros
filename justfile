@@ -7,6 +7,7 @@ _default:
 lint:
   cargo fix --allow-staged
   cargo fmt
+  cargo clippy
 
 # Build the selected targets
 build *targets:

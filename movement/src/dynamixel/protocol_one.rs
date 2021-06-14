@@ -25,7 +25,7 @@ pub enum InstructionType {
 }
 
 impl From<InstructionType> for u8 {
-    fn from(instruction: InstructionType) -> u8 {
+    fn from(instruction: InstructionType) -> Self {
         match instruction {
             InstructionType::Ping => 1,
             InstructionType::Read => 2,
@@ -42,17 +42,17 @@ impl From<InstructionType> for u8 {
 
 impl TryFrom<u8> for InstructionType {
     type Error = &'static str;
-    fn try_from(instruction: u8) -> Result<InstructionType, Self::Error> {
+    fn try_from(instruction: u8) -> Result<Self, Self::Error> {
         match instruction {
-            1 => Ok(InstructionType::Ping),
-            2 => Ok(InstructionType::Read),
-            3 => Ok(InstructionType::Write),
-            4 => Ok(InstructionType::RegWrite),
-            5 => Ok(InstructionType::Action),
-            6 => Ok(InstructionType::Reset),
-            7 => Ok(InstructionType::Reboot),
-            131 => Ok(InstructionType::SyncWrite),
-            146 => Ok(InstructionType::BulkRead),
+            1 => Ok(Self::Ping),
+            2 => Ok(Self::Read),
+            3 => Ok(Self::Write),
+            4 => Ok(Self::RegWrite),
+            5 => Ok(Self::Action),
+            6 => Ok(Self::Reset),
+            7 => Ok(Self::Reboot),
+            131 => Ok(Self::SyncWrite),
+            146 => Ok(Self::BulkRead),
             _ => Err("Unable to match out-of-range instruction!"),
         }
     }
@@ -78,19 +78,19 @@ pub enum StatusType {
 impl StatusType {
     /// Gets the numeric representation of an error code given the list of
     /// errors
-    pub fn get_error_code(errors: &Vec<StatusType>) -> u8 {
+    pub fn get_error_code(errors: &[Self]) -> u8 {
         let mut error_code = 0u8;
 
         for err in errors {
             let index = match err {
-                StatusType::Success => return 0,
-                StatusType::Instruction => 1,
-                StatusType::Overload => 2,
-                StatusType::Checksum => 3,
-                StatusType::Range => 4,
-                StatusType::Overheating => 5,
-                StatusType::AngleLimit => 6,
-                StatusType::InputVoltage => 7,
+                Self::Success => return 0,
+                Self::Instruction => 1,
+                Self::Overload => 2,
+                Self::Checksum => 3,
+                Self::Range => 4,
+                Self::Overheating => 5,
+                Self::AngleLimit => 6,
+                Self::InputVoltage => 7,
             };
 
             if index != 0 {
@@ -104,19 +104,19 @@ impl StatusType {
     }
 
     /// Gets the list of error types given a numeric representation of the error
-    pub fn get_error_types(error: &u8) -> Vec<StatusType> {
-        let mut errors: Vec<StatusType> = vec![];
+    pub fn get_error_types(error: u8) -> Vec<Self> {
+        let mut errors: Vec<Self> = vec![];
 
         for i in 0..8 {
             if error & (1 << i) != 0 {
-                let error_type: Option<StatusType> = match i {
-                    1 => Some(StatusType::Instruction),
-                    2 => Some(StatusType::Overload),
-                    3 => Some(StatusType::Checksum),
-                    4 => Some(StatusType::Range),
-                    5 => Some(StatusType::Overheating),
-                    6 => Some(StatusType::AngleLimit),
-                    7 => Some(StatusType::InputVoltage),
+                let error_type: Option<Self> = match i {
+                    1 => Some(Self::Instruction),
+                    2 => Some(Self::Overload),
+                    3 => Some(Self::Checksum),
+                    4 => Some(Self::Range),
+                    5 => Some(Self::Overheating),
+                    6 => Some(Self::AngleLimit),
+                    7 => Some(Self::InputVoltage),
                     _ => None,
                 };
 
@@ -150,22 +150,16 @@ pub struct Packet {
 
 impl PacketManipulation for Packet {
     /// Calculates the checksum for the packet
-    fn checksum(id: &u8, length: &u8, parameters: &Vec<u8>, opcode: &u8) -> u8 {
-        let mut sum: usize = *id as usize + *length as usize;
+    fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8 {
+        let mut sum: usize = id as usize + length as usize;
         sum += parameters.iter().map(|i| *i as usize).sum::<usize>();
-        sum += *opcode as usize;
+        sum += opcode as usize;
 
-        let chk: u8 = if sum > 255 {
-            (sum as u8) & 0xFF
-        } else {
-            sum as u8
-        };
-
-        !chk
+        !sum.to_le_bytes()[0]
     }
 
     /// Provides packet-crafting functionality for servo communication. If you want
-    /// to actually write to the servo, see the ConnectionHandler trait (TODO: LINK).
+    /// to actually write to the servo, see the `ConnectionHandler` trait.
     fn generate(&self) -> Result<Vec<u8>, String> {
         if let PacketType::Instruction(instruction) = self.packet_type {
             let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
@@ -188,11 +182,12 @@ pub enum PacketReadError {
 }
 
 impl Packet {
-    pub fn from_vec(
-        vec: Vec<u8>,
+    pub fn from_slice(
+        // Change this name
+        vec: &[u8],
         op: InstructionType,
         length: Option<usize>, // This paramater could probably be improved
-    ) -> Result<Packet, PacketReadError> {
+    ) -> Result<Self, PacketReadError> {
         // Run any instruction-spectific checks
         match op {
             InstructionType::Ping => {
@@ -208,13 +203,7 @@ impl Packet {
                     return Err(PacketReadError::InvalidLength);
                 }
             }
-            InstructionType::Write => {}
-            InstructionType::RegWrite => {}
-            InstructionType::Action => {}
-            InstructionType::Reset => {}
-            InstructionType::Reboot => {}
-            InstructionType::SyncWrite => {}
-            InstructionType::BulkRead => {}
+            _ => {}
         };
 
         // Validate header
@@ -223,39 +212,37 @@ impl Packet {
         }
 
         // Extract packet data
-        let (id, length, error) = (vec[2], vec[3], vec[4]);
+        let (id, len, error) = (vec[2], vec[3], vec[4]);
         let params: Vec<u8> = vec[5..vec.len() - 1].to_vec();
         let chk = vec.last().unwrap();
 
         // Validate checksum
-        if *chk != Packet::checksum(&id, &length, &params, &error) {
+        if *chk != Self::checksum(id, len, &params, error) {
             return Err(PacketReadError::InvalidChecksum);
         }
 
-        Ok(Packet::new_raw(
+        Ok(Self::new_raw(
             id,
-            PacketType::Status(StatusType::get_error_types(&error)),
+            PacketType::Status(StatusType::get_error_types(error)),
             params,
         ))
     }
 
-    pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Packet {
+    pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Self {
         // This should be changed to a universal trait to improve ergonomics
         let opcode = match packet_type {
             PacketType::Instruction(inst) => u8::from(inst),
-            PacketType::Status(ref status) => StatusType::get_error_code(&status),
+            PacketType::Status(ref status) => StatusType::get_error_code(status),
         };
-        let checksum = Packet::checksum(&id, &(parameters.len() as u8 + 2u8), &parameters, &opcode);
+        let checksum = Self::checksum(id, parameters.len() as u8 + 2u8, &parameters, opcode);
 
-        let packet = Packet {
+        Self {
             id,
             length: parameters.len() as u8 + 2u8,
             packet_type,
             parameters,
             checksum,
-        };
-
-        packet
+        }
     }
 
     /// Creates a new protocol 1 packet
@@ -264,12 +251,10 @@ impl Packet {
     /// use movement::dynamixel::PacketManipulation;
     /// use movement::dynamixel::protocol_one::{Packet, PacketType, InstructionType};
     ///
-    /// fn main() {
-    ///     let pck = Packet::new(1, PacketType::Instruction(InstructionType::Write), vec![25, 1]);
-    ///     assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
-    /// }
+    /// let pck = Packet::new(1, PacketType::Instruction(InstructionType::Write), vec![25, 1]);
+    /// assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
     /// ```
-    pub fn new(id: u8, packet_type: PacketType, parameters: Vec<u64>) -> Packet {
+    pub fn new(id: u8, packet_type: PacketType, parameters: &[u64]) -> Self {
         // Convert all given parameters into little-endian format
         // Also determines the minimum amount of bytes needed to represent data
         // Apparently some of the data is signed? need to investigate...
@@ -291,19 +276,17 @@ impl Packet {
         // This should be changed to a universal trait to improve ergonomics
         let opcode = match packet_type {
             PacketType::Instruction(inst) => u8::from(inst),
-            PacketType::Status(ref status) => StatusType::get_error_code(&status),
+            PacketType::Status(ref status) => StatusType::get_error_code(status),
         };
-        let checksum = Packet::checksum(&id, &(parameters.len() as u8 + 2u8), &new_params, &opcode);
+        let checksum = Self::checksum(id, parameters.len() as u8 + 2u8, &new_params, opcode);
 
-        let packet = Packet {
+        Self {
             id,
             length: new_params.len() as u8 + 2u8,
             packet_type,
             parameters: new_params,
             checksum,
-        };
-
-        packet
+        }
     }
 }
 
@@ -318,12 +301,9 @@ pub trait ProtocolOne {
     /// ```
     /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
     ///
-    /// fn main() {
-    ///     let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    ///     let Packet::ProtocolOne(packet) = dxl.ping();
-    ///     assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB]);
-    /// }
-    ///
+    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
+    /// let Packet::ProtocolOne(packet) = dxl.ping();
+    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB]);
     /// ```
     fn ping(&mut self) -> Packet;
 
@@ -333,12 +313,9 @@ pub trait ProtocolOne {
     /// ```
     /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
     ///
-    /// fn main() {
-    ///     let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    ///     let Packet::ProtocolOne(packet) = dxl.read(43, 1);
-    ///     assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x04, 0x02, 0x2B, 0x01, 0xCC]);
-    /// }
-    ///
+    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
+    /// let Packet::ProtocolOne(packet) = dxl.read(43, 1);
+    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x04, 0x02, 0x2B, 0x01, 0xCC]);
     /// ```
     fn read(&mut self, address: u8, length: u64) -> Packet;
 
@@ -356,12 +333,9 @@ pub trait ProtocolOne {
     /// ```
     /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
     ///
-    /// fn main() {
-    ///     let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    ///     let Packet::ProtocolOne(packet) = dxl.register_write(30, 500);
-    ///     assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x05, 0x04, 0x1E, 0xF4, 0x01, 0xE2]);
-    /// }
-    ///
+    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
+    /// let Packet::ProtocolOne(packet) = dxl.register_write(30, 500);
+    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x05, 0x04, 0x1E, 0xF4, 0x01, 0xE2]);
     /// ```
     fn register_write(&self, address: u8, value: u64) -> super::Packet;
 
@@ -394,49 +368,45 @@ where
 {
     fn ping(&mut self) -> Packet {
         let dxl_id = self.get_id().into();
-        let packet = Packet::new(
-            dxl_id,
-            PacketType::Instruction(InstructionType::Ping),
-            vec![],
-        );
+        let packet = Packet::new(dxl_id, PacketType::Instruction(InstructionType::Ping), &[]);
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
         let raw_packet =
             super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
 
-        Packet::from_vec(raw_packet, InstructionType::Ping, None).unwrap()
+        Packet::from_slice(&raw_packet, InstructionType::Ping, None).unwrap()
     }
 
     fn read(&mut self, address: u8, length: u64) -> Packet {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Read),
-            vec![address.into(), length],
+            &[address.into(), length],
         );
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
         let raw_packet = super::servo_connection::read_exact_packet(
             self.connection_handler.as_mut(),
             6 + length as usize,
         );
-        Packet::from_vec(raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
+        Packet::from_slice(&raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
     }
 
     fn write(&mut self, address: u8, value: u64) {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Write),
-            vec![address.into(), value],
+            &[address.into(), value],
         );
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), packet);
+        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
     }
 
     fn register_write(&self, address: u8, value: u64) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::RegWrite),
-            vec![address.into(), value],
+            &[address.into(), value],
         ))
     }
 
@@ -444,7 +414,7 @@ where
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Action),
-            vec![],
+            &[],
         ))
     }
 
@@ -452,7 +422,7 @@ where
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Reset),
-            vec![],
+            &[],
         ))
     }
 
@@ -460,7 +430,7 @@ where
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Reboot),
-            vec![],
+            &[],
         ))
     }
 }
@@ -478,42 +448,40 @@ where
 /// ```
 /// use movement::dynamixel::{Dynamixel, DynamixelID, Packet, SyncPacket};
 /// use movement::dynamixel::protocol_one::{ProtocolOne, sync_write};
-/// fn main() {
-///     let dxl = Dynamixel {
-///         id: DynamixelID::Broadcast,
-///     };
-///     let packets: Vec<SyncPacket> = vec![
-///         SyncPacket {
-///             id: 0,
-///             data: 0x010,
-///             address: 0x1E,
-///         },
-///         SyncPacket {
-///             id: 0,
-///             data: 0x150,
-///             address: 0x20,
-///         },
-///         SyncPacket {
-///             id: 1,
-///             data: 0x220,
-///             address: 0x1E,
-///         },
-///         SyncPacket {
-///             id: 1,
-///             data: 0x360,
-///             address: 0x20,
-///         },
-///     ];
 ///
-///     let Packet::ProtocolOne(packet) = sync_write(packets, 2).unwrap();
-///     assert_eq!(
-///         packet.generate().unwrap(),
-///         vec![
-///             0xFF, 0xFF, 0xFE, 0x0E, 0x83, 0x1E, 0x04, 0x00, 0x10, 0x00, 0x50, 0x01, 0x01, 0x20,
-///             0x02, 0x60, 0x03, 0x67
-///         ]
-///     );
-/// }
+/// let dxl = Dynamixel {
+///     id: DynamixelID::Broadcast,
+/// };
+/// let packets: Vec<SyncPacket> = vec![
+///     SyncPacket {
+///         id: 0,
+///         data: 0x010,
+///         address: 0x1E,
+///     },
+///     SyncPacket {
+///         id: 0,
+///         data: 0x150,
+///         address: 0x20,
+///     },
+///     SyncPacket {
+///         id: 1,
+///         data: 0x220,
+///         address: 0x1E,
+///     },
+///     SyncPacket {
+///         id: 1,
+///         data: 0x360,
+///         address: 0x20,
+///     },
+/// ];
+/// let Packet::ProtocolOne(packet) = sync_write(packets, 2).unwrap();
+/// assert_eq!(
+///     packet.generate().unwrap(),
+///     vec![
+///         0xFF, 0xFF, 0xFE, 0x0E, 0x83, 0x1E, 0x04, 0x00, 0x10, 0x00, 0x50, 0x01, 0x01, 0x20,
+///         0x02, 0x60, 0x03, 0x67
+///     ]
+/// );
 /// ```
 pub fn sync_write(
     mut packets: Vec<super::SyncPacket>,
@@ -522,13 +490,13 @@ pub fn sync_write(
     // The sync_write method has more conditions that must be satisfied
     // The servo must support sync_write
     // There must be at least 1 Dynamixel
-    if packets.len() == 0 {
+    if packets.is_empty() {
         return Err(String::from("Must have at least 1 Dynamixel!"));
     }
 
     // There must be the same amount of data for every servo
     let mut instruction_count: HashMap<u8, u8> = HashMap::new();
-    for pck in packets.iter() {
+    for pck in &packets {
         let entry = instruction_count.entry(pck.id).or_insert(0);
         *entry += 1;
     }
@@ -536,10 +504,10 @@ pub fn sync_write(
     let first_length = instruction_count.values().next().unwrap();
     for length in instruction_count.values() {
         if length != first_length {
-            return Err(String::from(format!(
+            return Err(format!(
                 "Must have consistent data length! (Found {} and {})",
                 first_length, length
-            )));
+            ));
         }
     }
     // Each servo must receive the same set of addresses
@@ -548,18 +516,16 @@ pub fn sync_write(
     // Sort the packets by ID then by address
     packets.sort_by(|a, b| a.id.cmp(&b.id).cmp(&b.address.cmp(&a.address)));
 
-    let mut params: Vec<u8> = vec![];
-    params.push(packets[0].address);
-    params.push(*first_length * bytesize as u8);
+    let mut params: Vec<u8> = vec![packets[0].address, *first_length * bytesize as u8];
 
-    for i in 0..packets.len() {
+    for (i, pck) in packets.iter().enumerate() {
         // Check if this packet is the first one for the servo
         if i % *first_length as usize == 0 {
-            params.push(packets[i].id);
+            params.push(pck.id);
         }
 
         let mut buf: Vec<u8> = vec![0; bytesize];
-        LittleEndian::write_uint(&mut buf, packets[i].data, bytesize);
+        LittleEndian::write_uint(&mut buf, pck.data, bytesize);
         params.extend(&buf);
     }
 
@@ -578,18 +544,18 @@ pub fn sync_write(
 /// ```
 /// use movement::dynamixel::{Dynamixel, DynamixelID, Packet, BulkReadPacket};
 /// use movement::dynamixel::protocol_one::{ProtocolOne, bulk_read};
-/// fn main() {
-///     let dxl = Dynamixel {
-///         id: DynamixelID::Broadcast,
-///     };
 ///
-///     let packets: Vec<BulkReadPacket> = vec![BulkReadPacket{id: 1, length: 2, address: 30}, BulkReadPacket{id: 2, length: 2, address: 36}];
-///     let Packet::ProtocolOne(packet) = bulk_read(packets).unwrap();
-///     assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0xFE, 0x09, 0x92, 0x00, 0x02, 0x01, 0x1E, 0x02, 0x02, 0x24, 0x1D]);
-/// }
-pub fn bulk_read(packets: Vec<super::BulkReadPacket>) -> Result<super::Packet, String> {
+/// let dxl = Dynamixel {
+///     id: DynamixelID::Broadcast,
+/// };
+///
+/// let packets: Vec<BulkReadPacket> = vec![BulkReadPacket{id: 1, length: 2, address: 30}, BulkReadPacket{id: 2, length: 2, address: 36}];
+/// let Packet::ProtocolOne(packet) = bulk_read(packets).unwrap();
+/// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0xFE, 0x09, 0x92, 0x00, 0x02, 0x01, 0x1E, 0x02, 0x02, 0x24, 0x1D]);
+/// ```
+pub fn bulk_read(packets: &[super::BulkReadPacket]) -> Result<super::Packet, String> {
     let mut known_ids: Vec<u8> = vec![];
-    for i in packets.iter() {
+    for i in packets {
         if known_ids.contains(&i.id) {
             return Err(String::from("Cannot address the same ID more than once!"));
         }
@@ -598,7 +564,7 @@ pub fn bulk_read(packets: Vec<super::BulkReadPacket>) -> Result<super::Packet, S
     }
 
     let mut params: Vec<u64> = vec![0x00];
-    for i in packets.iter() {
+    for i in packets {
         params.push(i.length.into());
         params.push(i.id.into());
         params.push(i.address.into());
@@ -607,6 +573,6 @@ pub fn bulk_read(packets: Vec<super::BulkReadPacket>) -> Result<super::Packet, S
     Ok(super::Packet::ProtocolOne(Packet::new(
         super::DynamixelID::Broadcast.into(),
         PacketType::Instruction(InstructionType::BulkRead),
-        params,
+        &params,
     )))
 }

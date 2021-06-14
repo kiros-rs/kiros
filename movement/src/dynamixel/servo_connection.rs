@@ -1,7 +1,7 @@
 use super::PacketManipulation;
 use std::io::{Read, Write};
 
-pub fn write_packet<W, P>(connection: &mut W, packet: P)
+pub fn write_packet<W, P>(connection: &mut W, packet: &P)
 where
     W: Write,
     P: PacketManipulation,
@@ -17,6 +17,7 @@ pub fn read_packet<R: Read>(connection: &mut R) -> Vec<u8> {
     buf
 }
 
+// Could this return a slice?
 pub fn read_exact_packet<R: Read>(connection: &mut R, len: usize) -> Vec<u8> {
     let mut buf: Vec<u8> = vec![0; len];
     connection.read_exact(&mut buf).unwrap();

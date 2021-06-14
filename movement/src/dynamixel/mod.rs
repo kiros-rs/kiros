@@ -1,7 +1,6 @@
 pub mod protocol_one;
 pub mod servo_connection;
 
-use byteorder::{LittleEndian, WriteBytesExt};
 use num_traits::Num;
 use phf;
 use ron::de::from_str;
@@ -20,7 +19,7 @@ pub enum Packet {
 
 /// The abstract categories an item in the control table
 /// can be part of.
-#[derive(Debug)]
+#[derive(Clone, Copy, Debug)]
 pub enum ControlTableType {
     Sensor,
     ServoInformation,
@@ -119,46 +118,15 @@ where
         for row in rows {
             // In the future, there needs to be handling for None
             let name = row.data_name.unwrap();
-            let value = match &*name {
-                "Alarm LED" => ControlTableType::Component,
-                "Baud Rate" => ControlTableType::Value,
-                "CCW Angle Limit" => ControlTableType::Value,
-                "CCW Compliance Margin" => ControlTableType::Value,
-                "CCW Compliance Slope" => ControlTableType::Value,
-                "CW Angle Limit" => ControlTableType::Value,
-                "CW Compliance Margin" => ControlTableType::Value,
-                "CW Compliance Slope" => ControlTableType::Value,
-                "Firmware Version" => ControlTableType::Value,
-                "Goal Position" => ControlTableType::Value,
-                "ID" => ControlTableType::Value,
-                "LED" => ControlTableType::Component,
-                "Lock" => ControlTableType::Value,
-                "Max Torque" => ControlTableType::Value,
-                "Max Voltage Limit" => ControlTableType::Value,
-                "Min Voltage Limit" => ControlTableType::Value,
-                "Model Number" => ControlTableType::Value,
-                "Moving" => ControlTableType::Value,
-                "Moving Speed" => ControlTableType::Sensor,
-                "Present Load" => ControlTableType::Sensor,
-                "Present Position" => ControlTableType::Sensor,
-                "Present Speed" => ControlTableType::Sensor,
-                "Present Temperature" => ControlTableType::Sensor,
-                "Present Voltage" => ControlTableType::Sensor,
-                "Punch" => ControlTableType::Sensor, // Unsure
-                "Registered" => ControlTableType::Value,
-                "Return Delay Time" => ControlTableType::Value,
-                "Shutdown" => ControlTableType::Component, // Unsure, maybe rename component?
-                "Status Return Level" => ControlTableType::Value,
-                "Temperature Limit" => ControlTableType::Value,
-                "Torque Enable" => ControlTableType::Value,
-                "Torque Limit" => ControlTableType::Value,
-                _ => ControlTableType::Uncategorized,
+            let value = match CONTROL_TABLE_TYPES.get(&*name) {
+                Some(value) => *value,
+                None => ControlTableType::Uncategorized,
             };
 
             control_table.insert(name, value);
         }
 
-        Dynamixel {
+        Self {
             connection_handler: Box::new(connection_handler),
             control_table,
             sensors: HashMap::new(),
@@ -189,7 +157,7 @@ pub enum DynamixelID {
 
 // Consider using the num-traits crate to make this more broad?
 impl From<DynamixelID> for u8 {
-    fn from(item: DynamixelID) -> u8 {
+    fn from(item: DynamixelID) -> Self {
         match item {
             DynamixelID::Broadcast => 0xFE,
             DynamixelID::ID(id) => id,
@@ -199,7 +167,7 @@ impl From<DynamixelID> for u8 {
 
 // TODO: Rename this to something better
 pub trait PacketManipulation {
-    fn checksum(id: &u8, length: &u8, parameters: &Vec<u8>, opcode: &u8) -> u8;
+    fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8;
     fn generate(&self) -> Result<Vec<u8>, String>;
 }
 
@@ -247,53 +215,3 @@ macro_rules! impl_to_databytes {
         }
     };
 }
-
-#[derive(Debug)]
-pub enum DataBytes {
-    One(u8),
-    OneSigned(i8),
-    Two(u16),
-    TwoSigned(i16),
-    Four(u32),
-    FourSigned(i32),
-}
-
-// This should also be incorporated into the proc macro
-impl From<DataBytes> for Vec<u8> {
-    fn from(bytes: DataBytes) -> Vec<u8> {
-        let mut buf: Vec<u8> = Vec::new();
-        match bytes {
-            DataBytes::One(n) => buf.write_u8(n).unwrap(),
-            DataBytes::OneSigned(n) => buf.write_i8(n).unwrap(),
-            DataBytes::Two(n) => buf.write_u16::<LittleEndian>(n).unwrap(),
-            DataBytes::TwoSigned(n) => buf.write_i16::<LittleEndian>(n).unwrap(),
-            DataBytes::Four(n) => buf.write_u32::<LittleEndian>(n).unwrap(),
-            DataBytes::FourSigned(n) => buf.write_i32::<LittleEndian>(n).unwrap(),
-        }
-
-        buf
-    }
-}
-
-// impl From<&DataBytes> for Vec<u8> {
-//     fn from(bytes: &DataBytes) -> Vec<u8> {
-//         let mut buf: Vec<u8> = Vec::new();
-//         match bytes {
-//             DataBytes::One(n) => buf.write_u8(*n).unwrap(),
-//             DataBytes::OneSigned(n) => buf.write_i8(*n).unwrap(),
-//             DataBytes::Two(n) => buf.write_u16::<LittleEndian>(*n).unwrap(),
-//             DataBytes::TwoSigned(n) => buf.write_i16::<LittleEndian>(*n).unwrap(),
-//             DataBytes::Four(n) => buf.write_u32::<LittleEndian>(*n).unwrap(),
-//             DataBytes::FourSigned(n) => buf.write_i32::<LittleEndian>(*n).unwrap(),
-//         }
-
-//         buf
-//     }
-// }
-
-impl_to_databytes!(u8, DataBytes::One);
-impl_to_databytes!(i8, DataBytes::OneSigned);
-impl_to_databytes!(u16, DataBytes::Two);
-impl_to_databytes!(i16, DataBytes::TwoSigned);
-impl_to_databytes!(u32, DataBytes::Four);
-impl_to_databytes!(i32, DataBytes::FourSigned);
