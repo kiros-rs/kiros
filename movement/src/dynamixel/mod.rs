@@ -117,8 +117,7 @@ where
         // One solution is to store by address instead of data name?
         let mut control_table: HashMap<String, ControlTableType> = HashMap::new();
         for row in rows {
-            // control_table.insert(row.data_name.unwrap(), row);
-            // control_table.insert(row.data_name.unwrap(), ControlTableType::Value);
+            // In the future, there needs to be handling for None
             let name = row.data_name.unwrap();
             let value = match &*name {
                 "Alarm LED" => ControlTableType::Component,
@@ -162,26 +161,6 @@ where
         Dynamixel {
             connection_handler: Box::new(connection_handler),
             control_table,
-            sensors: HashMap::new(),
-            components: HashMap::new(),
-            information: HashMap::new(),
-            parameters: HashMap::new(),
-            last_packet: None,
-            sent_packets: vec![],
-            collects_packets: false,
-        }
-    }
-}
-
-// HACK: Should be removed when sensors are completed
-impl<C> Dynamixel<C, u8>
-where
-    C: Read + Write,
-{
-    pub fn new_empty(connection_handler: C) -> Self {
-        Dynamixel {
-            connection_handler: Box::new(connection_handler),
-            control_table: HashMap::new(),
             sensors: HashMap::new(),
             components: HashMap::new(),
             information: HashMap::new(),

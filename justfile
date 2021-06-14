@@ -42,7 +42,8 @@ build *targets:
       'windows': 'x86_64-pc-windows-gnu',
       'mac': 'x86_64-apple-darwin',
       'rpi': 'armv7-unknown-linux-gnueabihf',
-      'rpi-legacy': 'arm-unknown-linux-gnueabihf'
+      'rpi-legacy': 'arm-unknown-linux-gnueabihf',
+      'wasm': 'wasm32-unknown-unknown'
       # More shall be added soon...
   }
   SELECTED_TARGETS = '{{targets}}'.split(' ')
