@@ -112,7 +112,7 @@ where
         let data: &str = DYNAMIXELS.get(name).unwrap();
         // This should probably be changed to use num-traits in the future
         let rows: Vec<ControlTableData<u64>> = from_str(data).unwrap();
-        
+
         // There is duplication of the "Data Name" value which should be removed
         // One solution is to store by address instead of data name?
         let mut control_table: HashMap<String, ControlTableType> = HashMap::new();

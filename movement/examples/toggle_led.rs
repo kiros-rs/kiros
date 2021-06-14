@@ -2,7 +2,7 @@
 // a reference for future use.
 
 // TODO: Update this to work with newer APIs & broader range of hardware
-use connection::{Connect, ConnectionSettings, wired};
+use connection::{wired, Connect, ConnectionSettings};
 use movement::dynamixel::{protocol_one::ProtocolOne, Dynamixel};
 
 fn main() {

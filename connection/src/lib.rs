@@ -1,12 +1,14 @@
-pub mod wired;
 pub mod virt;
+pub mod wired;
 
 use std::io::{Read, Write};
 use std::time::{Duration, Instant};
 
 // Add send/sync to this?
 pub trait Connect: Read + Write {
-    fn connect(settings: &ConnectionSettings) -> Self where Self: Sized; // Is this the best way to do it?
+    fn connect(settings: &ConnectionSettings) -> Self
+    where
+        Self: Sized; // Is this the best way to do it?
 }
 
 #[derive(Clone, Debug)]
@@ -36,7 +38,11 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new(connection_type: ConnectionType, connection_method: ConnectionMethod, connection_settings: ConnectionSettings) -> Self {
+    pub fn new(
+        connection_type: ConnectionType,
+        connection_method: ConnectionMethod,
+        connection_settings: ConnectionSettings,
+    ) -> Self {
         Connection {
             connected_at: Some(Instant::now()),
             connection_type,

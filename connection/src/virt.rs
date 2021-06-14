@@ -1,12 +1,12 @@
 use crate::*;
-use std::io::{Error, Read, Write};
 use std::fs::DirEntry;
+use std::io::{Error, Read, Write};
 
 pub enum VirtualMode {
-    Dataset (DirEntry),
+    Dataset(DirEntry),
     Random { min: usize, max: usize },
-    Constant (i64),
-    Broken (Error), // Constantly returns err
+    Constant(i64),
+    Broken(Error), // Constantly returns err
     Empty,
 }
 
@@ -22,7 +22,7 @@ impl Read for VirtualConnection {
                 for i in 0..bytes.len() {
                     buf[i] = bytes[i]
                 }
-            },
+            }
             _ => todo!(),
         }
 
