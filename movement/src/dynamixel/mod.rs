@@ -3,10 +3,14 @@ pub mod servo_connection;
 
 use byteorder::{LittleEndian, WriteBytesExt};
 use num_traits::Num;
+use phf;
+use ron::de::from_str;
 use sensor::DataSensor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::io::{Read, Write};
+
+include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
 // Extend this with protocol 2 packet when implemented
 /// A protocol-agnostic representation of a Dynamixel packet
@@ -16,11 +20,13 @@ pub enum Packet {
 
 /// The abstract categories an item in the control table
 /// can be part of.
+#[derive(Debug)]
 pub enum ControlTableType {
     Sensor,
     ServoInformation,
     Component,
-    Constraint,
+    Value,
+    Uncategorized,
 }
 
 /// The levels of permission a user is granted in terms of an item in the
@@ -71,7 +77,7 @@ pub struct ControlTableData<T> {
 /// - Sensor (temperature, voltage)
 /// - Servo Information (model, id)
 /// - Component (led, alarm)
-/// - Constraint (cw limit, max speed)
+/// - Value (cw limit, max speed)
 /// The servo stores this abstracted representation of its control table
 /// within the aforementioned fields. Additionally, the structure stores
 /// an index of the control table (based on the data name column) to enable
@@ -88,36 +94,81 @@ pub struct Dynamixel<C: Read + Write, T: Num> {
     pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
     pub information: HashMap<String, ControlTableData<T>>,
-    pub constraints: HashMap<String, ControlTableData<T>>,
+    pub parameters: HashMap<String, ControlTableData<T>>, // There should be a  struct
+    // Also something for 'values' eg "Goal Position" (should this be incorporated into ?)
     pub last_packet: Option<Packet>,
     pub sent_packets: Vec<Packet>,
     pub collects_packets: bool,
 }
 
+// There should be a builder pattern for this struct
 impl<C, T> Dynamixel<C, T>
 where
     C: Read + Write,
     T: Num,
 {
-    /// Create a new Dynamixel servo
-    pub fn new(
-        connection_handler: C,
-        control_table: HashMap<String, ControlTableType>,
-        sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
-        information: HashMap<String, ControlTableData<T>>,
-        constraints: HashMap<String, ControlTableData<T>>,
-        collects_packets: bool,
-    ) -> Self {
+    /// Create a new Dynamixel servo from template
+    pub fn from_template(name: &str, connection_handler: C) -> Self {
+        let data: &str = DYNAMIXELS.get(name).unwrap();
+        // This should probably be changed to use num-traits in the future
+        let rows: Vec<ControlTableData<u64>> = from_str(data).unwrap();
+        
+        // There is duplication of the "Data Name" value which should be removed
+        // One solution is to store by address instead of data name?
+        let mut control_table: HashMap<String, ControlTableType> = HashMap::new();
+        for row in rows {
+            // control_table.insert(row.data_name.unwrap(), row);
+            // control_table.insert(row.data_name.unwrap(), ControlTableType::Value);
+            let name = row.data_name.unwrap();
+            let value = match &*name {
+                "Alarm LED" => ControlTableType::Component,
+                "Baud Rate" => ControlTableType::Value,
+                "CCW Angle Limit" => ControlTableType::Value,
+                "CCW Compliance Margin" => ControlTableType::Value,
+                "CCW Compliance Slope" => ControlTableType::Value,
+                "CW Angle Limit" => ControlTableType::Value,
+                "CW Compliance Margin" => ControlTableType::Value,
+                "CW Compliance Slope" => ControlTableType::Value,
+                "Firmware Version" => ControlTableType::Value,
+                "Goal Position" => ControlTableType::Value,
+                "ID" => ControlTableType::Value,
+                "LED" => ControlTableType::Component,
+                "Lock" => ControlTableType::Value,
+                "Max Torque" => ControlTableType::Value,
+                "Max Voltage Limit" => ControlTableType::Value,
+                "Min Voltage Limit" => ControlTableType::Value,
+                "Model Number" => ControlTableType::Value,
+                "Moving" => ControlTableType::Value,
+                "Moving Speed" => ControlTableType::Sensor,
+                "Present Load" => ControlTableType::Sensor,
+                "Present Position" => ControlTableType::Sensor,
+                "Present Speed" => ControlTableType::Sensor,
+                "Present Temperature" => ControlTableType::Sensor,
+                "Present Voltage" => ControlTableType::Sensor,
+                "Punch" => ControlTableType::Sensor, // Unsure
+                "Registered" => ControlTableType::Value,
+                "Return Delay Time" => ControlTableType::Value,
+                "Shutdown" => ControlTableType::Component, // Unsure, maybe rename component?
+                "Status Return Level" => ControlTableType::Value,
+                "Temperature Limit" => ControlTableType::Value,
+                "Torque Enable" => ControlTableType::Value,
+                "Torque Limit" => ControlTableType::Value,
+                _ => ControlTableType::Uncategorized,
+            };
+
+            control_table.insert(name, value);
+        }
+
         Dynamixel {
             connection_handler: Box::new(connection_handler),
             control_table,
-            sensors,
+            sensors: HashMap::new(),
             components: HashMap::new(),
-            information,
-            constraints,
+            information: HashMap::new(),
+            parameters: HashMap::new(),
             last_packet: None,
             sent_packets: vec![],
-            collects_packets,
+            collects_packets: false,
         }
     }
 }
@@ -134,7 +185,7 @@ where
             sensors: HashMap::new(),
             components: HashMap::new(),
             information: HashMap::new(),
-            constraints: HashMap::new(),
+            parameters: HashMap::new(),
             last_packet: None,
             sent_packets: vec![],
             collects_packets: false,
