@@ -189,21 +189,6 @@ where
     }
 }
 
-/// A packet used to address the same instruction to a group of servos
-#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
-pub struct SyncPacket {
-    pub id: u8, // Cannot be DynamixelID enum as only non-broadcast IDs allowed
-    pub data: Parameter,
-    pub address: u8,
-}
-
-/// A packet used to read from multiple servos at the same time (MX series only)
-pub struct BulkReadPacket {
-    pub id: u8,
-    pub length: u8,
-    pub address: u8,
-}
-
 #[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
 pub enum ParameterType {
     Signed(i64),

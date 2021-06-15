@@ -264,154 +264,67 @@ impl Packet {
     }
 }
 
-/// This trait exposes all functionality possessed by Protocol One servos. For
-/// more information, please refer to <https://emanual.robotis.com/docs/en/dxl/protocol1/#instruction-details>
-// TODO: Refactor doctests using fully-implemented API
-// TODO: Fix number sizes
-pub trait ProtocolOne {
-    /// Creates a packet to ping the dynamixel, returning the crafted packet
-    ///
-    /// This function implements section [4.1](https://emanual.robotis.com/docs/en/dxl/protocol1/#ping)
-    /// ```
-    /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
-    ///
-    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    /// let Packet::ProtocolOne(packet) = dxl.ping();
-    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x02, 0x01, 0xFB]);
-    /// ```
-    fn ping(&mut self) -> Packet;
-
-    /// Creates a packet to read from an address on the dynamixel, returning the crafted packet
-    ///
-    /// This function implements section [4.2](https://emanual.robotis.com/docs/en/dxl/protocol1/#read)
-    /// ```
-    /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
-    ///
-    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    /// let Packet::ProtocolOne(packet) = dxl.read(43, 1);
-    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x04, 0x02, 0x2B, 0x01, 0xCC]);
-    /// ```
-    // There should be a way to just get the returned value as a Parameter
-    fn read(&mut self, address: u8, length: u8) -> Packet;
-
-    /// Creates a packet to write a value to the dynamixel at a given address,
-    /// returning the crafted packet
-    ///
-    /// This function implements section [4.3](https://emanual.robotis.com/docs/en/dxl/protocol1/#write)
-    // TODO: Create doctest using working id() function
-    fn write(&mut self, address: u8, value: Parameter);
-
-    /// Creates a packet to register a value to write to the dynamixel at a
-    /// given address, returning the crafted packet
-    ///
-    /// This function implements section [4.4](https://emanual.robotis.com/docs/en/dxl/protocol1/#reg-write)
-    /// ```
-    /// use movement::dynamixel::{Dynamixel, Packet, DynamixelID, protocol_one::ProtocolOne};
-    ///
-    /// let dxl = Dynamixel {id: DynamixelID::ID(1)};
-    /// let Packet::ProtocolOne(packet) = dxl.register_write(30, 500);
-    /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x05, 0x04, 0x1E, 0xF4, 0x01, 0xE2]);
-    /// ```
-    fn register_write(&self, address: u8, value: Parameter) -> super::Packet;
-
-    /// Creates a packet to action the registered value change, returning the
-    /// crafted packet
-    ///
-    /// This function implements sction [4.5](https://emanual.robotis.com/docs/en/dxl/protocol1/#action)
-    // TODO: Create doctest using working id() function
-    fn action(&self) -> super::Packet;
-
-    /// Creates a packet to reset the servo, returning the crafted packet
-    ///
-    /// This function implements section [4.6](https://emanual.robotis.com/docs/en/dxl/protocol1/#reset)
-    // TODO: Create doctest using working id() function
-    fn reset(&self) -> super::Packet;
-
-    /// Creates a packet to reboot the servo, returning the crafted packet
-    ///
-    /// This function implements section [4.7](https://emanual.robotis.com/docs/en/dxl/protocol1/#reboot)
-    fn reboot(&self) -> super::Packet;
-
-    // fn bulk_read(&self) -> Result<Vec<Packet>, String>;
+pub fn ping(id: u8) -> Packet {
+    Packet::new(id, PacketType::Instruction(InstructionType::Ping), &[])
 }
 
-// is it possible to turn this pattern into a macro?
-impl<C, T> ProtocolOne for super::Dynamixel<C, T>
-where
-    C: Read + Write,
-    T: Num,
-{
-    fn ping(&mut self) -> Packet {
-        let dxl_id = self.get_id().into();
-        let packet = Packet::new(dxl_id, PacketType::Instruction(InstructionType::Ping), &[]);
+pub fn read(id: u8, address: u8, length: u8) -> Packet {
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::Read),
+        &[
+            Parameter::unsigned(address.into(), 1),
+            Parameter::unsigned(length.into(), 1),
+        ],
+    )
+}
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
-        let raw_packet =
-            super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
+pub fn write(id: u8, address: u8, value: Parameter) -> Packet{
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::Write),
+        &[Parameter::unsigned(address.into(), 1), value],
+    )
+}
 
-        Packet::from_buf(&packet, &raw_packet).unwrap()
-    }
+pub fn register_write(id: u8, address: u8, value: Parameter) -> Packet {
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::RegWrite),
+        &[Parameter::unsigned(address.into(), 1), value],
+    )
+}
 
-    fn read(&mut self, address: u8, length: u8) -> Packet {
-        let packet = Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::Read),
-            &[
-                Parameter::unsigned(address.into(), 1),
-                Parameter::unsigned(length.into(), 1),
-            ],
-        );
+pub fn action(id: u8) -> Packet {
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::Action),
+        &[],
+    )
+}
 
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
-        let raw_packet = super::servo_connection::read_exact_packet(
-            self.connection_handler.as_mut(),
-            6 + length as usize,
-        );
+pub fn reset(id: u8) -> Packet {
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::Reset),
+        &[],
+    )
+}
 
-        Packet::from_buf(&packet, &raw_packet).unwrap()
-    }
+pub fn reboot(id: u8) -> Packet {
+    Packet::new(
+        id,
+        PacketType::Instruction(InstructionType::Reboot),
+        &[],
+    )
+}
 
-    fn write(&mut self, address: u8, value: Parameter) {
-        let packet = Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::Write),
-            &[Parameter::unsigned(address.into(), 1), value],
-        );
-
-        super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
-    }
-
-    fn register_write(&self, address: u8, value: Parameter) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::RegWrite),
-            &[Parameter::unsigned(address.into(), 1), value],
-        ))
-    }
-
-    fn action(&self) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::Action),
-            &[],
-        ))
-    }
-
-    fn reset(&self) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::Reset),
-            &[],
-        ))
-    }
-
-    fn reboot(&self) -> super::Packet {
-        super::Packet::ProtocolOne(Packet::new(
-            self.get_id().into(),
-            PacketType::Instruction(InstructionType::Reboot),
-            &[],
-        ))
-    }
+/// A packet used to address the same instruction to a group of servos
+#[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
+pub struct SyncPacket {
+    pub id: u8, // Cannot be DynamixelID enum as only non-broadcast IDs allowed
+    pub data: Parameter,
+    pub address: u8,
 }
 
 /// Creates a packet to synchronously write to multiple servos at once,
@@ -462,7 +375,7 @@ where
 ///     ]
 /// );
 /// ```
-pub fn sync_write(mut packets: Vec<super::SyncPacket>) -> Result<super::Packet, String> {
+pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, String> {
     // The sync_write method has more conditions that must be satisfied
     // The servo must support sync_write
     // There must be at least 1 Dynamixel
@@ -507,11 +420,18 @@ pub fn sync_write(mut packets: Vec<super::SyncPacket>) -> Result<super::Packet, 
         params.push(pck.data);
     }
 
-    Ok(super::Packet::ProtocolOne(Packet::new(
+    Ok(Packet::new(
         super::DynamixelID::Broadcast.into(),
         PacketType::Instruction(InstructionType::SyncWrite),
         &params,
-    )))
+    ))
+}
+
+/// A packet used to read from multiple servos at the same time (MX series only)
+pub struct BulkReadPacket {
+    pub id: u8,
+    pub length: u8,
+    pub address: u8,
 }
 
 /// Creates a packet to read from multiple servos at once
@@ -531,7 +451,7 @@ pub fn sync_write(mut packets: Vec<super::SyncPacket>) -> Result<super::Packet, 
 /// let Packet::ProtocolOne(packet) = bulk_read(packets).unwrap();
 /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0xFE, 0x09, 0x92, 0x00, 0x02, 0x01, 0x1E, 0x02, 0x02, 0x24, 0x1D]);
 /// ```
-pub fn bulk_read(packets: &[super::BulkReadPacket]) -> Result<super::Packet, String> {
+pub fn bulk_read(packets: &[BulkReadPacket]) -> Result<Packet, String> {
     let mut known_ids: Vec<u8> = vec![];
     for i in packets {
         if known_ids.contains(&i.id) {
@@ -548,9 +468,9 @@ pub fn bulk_read(packets: &[super::BulkReadPacket]) -> Result<super::Packet, Str
         params.push(Parameter::unsigned(i.address.into(), 1));
     }
 
-    Ok(super::Packet::ProtocolOne(Packet::new(
+    Ok(Packet::new(
         super::DynamixelID::Broadcast.into(),
         PacketType::Instruction(InstructionType::BulkRead),
         &params,
-    )))
+    ))
 }
