@@ -3,8 +3,7 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use super::{DynamixelInformation, PacketManipulation};
-use byteorder::{ByteOrder, LittleEndian, WriteBytesExt};
+use super::{DynamixelInformation, PacketManipulation, Parameter};
 use num_traits::Num;
 use std::collections::HashMap;
 use std::convert::TryFrom;
@@ -144,7 +143,8 @@ pub struct Packet {
     pub id: u8,
     length: u8,
     pub packet_type: PacketType,
-    pub parameters: Vec<u8>,
+    pub bytes: Vec<u8>,
+    pub parameters: Vec<Parameter>,
     checksum: u8,
 }
 
@@ -163,7 +163,7 @@ impl PacketManipulation for Packet {
     fn generate(&self) -> Result<Vec<u8>, String> {
         if let PacketType::Instruction(instruction) = self.packet_type {
             let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
-            packet.extend(&self.parameters);
+            packet.extend(&self.bytes);
             packet.push(self.checksum);
 
             Ok(packet)
@@ -182,67 +182,56 @@ pub enum PacketReadError {
 }
 
 impl Packet {
-    pub fn from_slice(
-        // Change this name
-        vec: &[u8],
-        op: InstructionType,
-        length: Option<usize>, // This paramater could probably be improved
-    ) -> Result<Self, PacketReadError> {
+    pub fn from_buf(&self, buf: &[u8]) -> Result<Self, PacketReadError> {
         // Run any instruction-spectific checks
-        match op {
-            InstructionType::Ping => {
-                if vec.len() != 6 {
-                    return Err(PacketReadError::InvalidLength);
+        let params: Vec<Parameter> = match self.packet_type {
+            PacketType::Instruction(op) => match op {
+                InstructionType::Ping => {
+                    if buf.len() != 6 {
+                        return Err(PacketReadError::InvalidLength);
+                    }
+
+                    vec![]
                 }
-            }
-            InstructionType::Read => {
-                if vec.len()
-                    != 6 + length
-                        .expect("Must pass length parameter for all applicable instructions!")
-                {
-                    return Err(PacketReadError::InvalidLength);
+                InstructionType::Read => {
+                    // The second parameter is guaranteed to be an unsigned u8
+                    let data_len = self.parameters[1].as_bytes()[0] as usize;
+                    if buf.len() != 6 + data_len {
+                        return Err(PacketReadError::InvalidLength);
+                    }
+
+                    // Need to use the stored range to figure out if this is a signed or unsigned value
+                    let mut bytes = [0u8; 8];
+                    bytes[..data_len].clone_from_slice(&buf[5..(data_len + 5)]);
+                    vec![Parameter::unsigned(u64::from_le_bytes(bytes), data_len)]
                 }
-            }
-            _ => {}
+                _ => buf[5..buf.len() - 1]
+                    .iter()
+                    .map(|i| Parameter::unsigned(*i as u64, 1))
+                    .collect(),
+            },
+            PacketType::Status(_) => todo!(),
         };
 
         // Validate header
-        if vec[0..2] != [0xFF, 0xFF] {
+        if buf[0..2] != [0xFF, 0xFF] {
             return Err(PacketReadError::InvalidHeader);
         }
 
         // Extract packet data
-        let (id, len, error) = (vec[2], vec[3], vec[4]);
-        let params: Vec<u8> = vec[5..vec.len() - 1].to_vec();
-        let chk = vec.last().unwrap();
+        let (id, len, error) = (buf[2], buf[3], buf[4]);
+        let chk = buf.last().unwrap();
 
         // Validate checksum
-        if *chk != Self::checksum(id, len, &params, error) {
+        if *chk != Self::checksum(id, len, &Parameter::from_slice(&params), error) {
             return Err(PacketReadError::InvalidChecksum);
         }
 
-        Ok(Self::new_raw(
+        Ok(Self::new(
             id,
             PacketType::Status(StatusType::get_error_types(error)),
-            params,
+            &params, // TODO: Fix this
         ))
-    }
-
-    pub fn new_raw(id: u8, packet_type: PacketType, parameters: Vec<u8>) -> Self {
-        // This should be changed to a universal trait to improve ergonomics
-        let opcode = match packet_type {
-            PacketType::Instruction(inst) => u8::from(inst),
-            PacketType::Status(ref status) => StatusType::get_error_code(status),
-        };
-        let checksum = Self::checksum(id, parameters.len() as u8 + 2u8, &parameters, opcode);
-
-        Self {
-            id,
-            length: parameters.len() as u8 + 2u8,
-            packet_type,
-            parameters,
-            checksum,
-        }
     }
 
     /// Creates a new protocol 1 packet
@@ -254,37 +243,22 @@ impl Packet {
     /// let pck = Packet::new(1, PacketType::Instruction(InstructionType::Write), vec![25, 1]);
     /// assert_eq!(pck.generate().unwrap(), [255, 255, 1, 4, 3, 25, 1, 221]);
     /// ```
-    pub fn new(id: u8, packet_type: PacketType, parameters: &[u64]) -> Self {
-        // Convert all given parameters into little-endian format
-        // Also determines the minimum amount of bytes needed to represent data
-        // Apparently some of the data is signed? need to investigate...
-        // TODO: Add test to make sure the min-bytes functionality works
-        let mut new_params: Vec<u8> = vec![];
-
-        for i in parameters.iter() {
-            let mut write_buf: Vec<u8> = vec![];
-
-            write_buf.write_u64::<LittleEndian>(*i).unwrap();
-            for x in 1..write_buf.len() {
-                if LittleEndian::read_uint(&write_buf[0..x], x) == *i {
-                    new_params.extend(&write_buf[0..x]);
-                    break;
-                }
-            }
-        }
+    pub fn new(id: u8, packet_type: PacketType, parameters: &[Parameter]) -> Self {
+        let param_bytes: Vec<u8> = Parameter::from_slice(parameters);
 
         // This should be changed to a universal trait to improve ergonomics
         let opcode = match packet_type {
             PacketType::Instruction(inst) => u8::from(inst),
             PacketType::Status(ref status) => StatusType::get_error_code(status),
         };
-        let checksum = Self::checksum(id, parameters.len() as u8 + 2u8, &new_params, opcode);
+        let checksum = Self::checksum(id, parameters.len() as u8 + 2u8, &param_bytes, opcode);
 
         Self {
             id,
-            length: new_params.len() as u8 + 2u8,
+            length: param_bytes.len() as u8 + 2u8,
             packet_type,
-            parameters: new_params,
+            bytes: param_bytes,
+            parameters: parameters.to_vec(),
             checksum,
         }
     }
@@ -317,14 +291,15 @@ pub trait ProtocolOne {
     /// let Packet::ProtocolOne(packet) = dxl.read(43, 1);
     /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x04, 0x02, 0x2B, 0x01, 0xCC]);
     /// ```
-    fn read(&mut self, address: u8, length: u64) -> Packet;
+    // There should be a way to just get the returned value as a Parameter
+    fn read(&mut self, address: u8, length: u8) -> Packet;
 
     /// Creates a packet to write a value to the dynamixel at a given address,
     /// returning the crafted packet
     ///
     /// This function implements section [4.3](https://emanual.robotis.com/docs/en/dxl/protocol1/#write)
     // TODO: Create doctest using working id() function
-    fn write(&mut self, address: u8, value: u64);
+    fn write(&mut self, address: u8, value: Parameter);
 
     /// Creates a packet to register a value to write to the dynamixel at a
     /// given address, returning the crafted packet
@@ -337,7 +312,7 @@ pub trait ProtocolOne {
     /// let Packet::ProtocolOne(packet) = dxl.register_write(30, 500);
     /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0x01, 0x05, 0x04, 0x1E, 0xF4, 0x01, 0xE2]);
     /// ```
-    fn register_write(&self, address: u8, value: u64) -> super::Packet;
+    fn register_write(&self, address: u8, value: Parameter) -> super::Packet;
 
     /// Creates a packet to action the registered value change, returning the
     /// crafted packet
@@ -374,14 +349,17 @@ where
         let raw_packet =
             super::servo_connection::read_exact_packet(self.connection_handler.as_mut(), 6);
 
-        Packet::from_slice(&raw_packet, InstructionType::Ping, None).unwrap()
+        Packet::from_buf(&packet, &raw_packet).unwrap()
     }
 
-    fn read(&mut self, address: u8, length: u64) -> Packet {
+    fn read(&mut self, address: u8, length: u8) -> Packet {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Read),
-            &[address.into(), length],
+            &[
+                Parameter::unsigned(address.into(), 1),
+                Parameter::unsigned(length.into(), 1),
+            ],
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
@@ -389,24 +367,25 @@ where
             self.connection_handler.as_mut(),
             6 + length as usize,
         );
-        Packet::from_slice(&raw_packet, InstructionType::Read, Some(length as usize)).unwrap()
+
+        Packet::from_buf(&packet, &raw_packet).unwrap()
     }
 
-    fn write(&mut self, address: u8, value: u64) {
+    fn write(&mut self, address: u8, value: Parameter) {
         let packet = Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::Write),
-            &[address.into(), value],
+            &[Parameter::unsigned(address.into(), 1), value],
         );
 
         super::servo_connection::write_packet(self.connection_handler.as_mut(), &packet);
     }
 
-    fn register_write(&self, address: u8, value: u64) -> super::Packet {
+    fn register_write(&self, address: u8, value: Parameter) -> super::Packet {
         super::Packet::ProtocolOne(Packet::new(
             self.get_id().into(),
             PacketType::Instruction(InstructionType::RegWrite),
-            &[address.into(), value],
+            &[Parameter::unsigned(address.into(), 1), value],
         ))
     }
 
@@ -483,10 +462,7 @@ where
 ///     ]
 /// );
 /// ```
-pub fn sync_write(
-    mut packets: Vec<super::SyncPacket>,
-    bytesize: usize,
-) -> Result<super::Packet, String> {
+pub fn sync_write(mut packets: Vec<super::SyncPacket>) -> Result<super::Packet, String> {
     // The sync_write method has more conditions that must be satisfied
     // The servo must support sync_write
     // There must be at least 1 Dynamixel
@@ -494,21 +470,22 @@ pub fn sync_write(
         return Err(String::from("Must have at least 1 Dynamixel!"));
     }
 
+    let bytesize = packets[0].data.len;
+    if !packets.iter().all(|i| i.data.len != bytesize) {
+        return Err("Inconsistent byte size!".into());
+    }
+
     // There must be the same amount of data for every servo
-    let mut instruction_count: HashMap<u8, u8> = HashMap::new();
+    let mut instruction_count: HashMap<u8, usize> = HashMap::new();
     for pck in &packets {
         let entry = instruction_count.entry(pck.id).or_insert(0);
         *entry += 1;
     }
 
-    let first_length = instruction_count.values().next().unwrap();
-    for length in instruction_count.values() {
-        if length != first_length {
-            return Err(format!(
-                "Must have consistent data length! (Found {} and {})",
-                first_length, length
-            ));
-        }
+    // Since all lengths must be equal, we can use length in all future calculations
+    let length = instruction_count.values().next().unwrap();
+    if !instruction_count.values().all(|len| len == length) {
+        return Err("Inconsistent data length!".into());
     }
     // Each servo must receive the same set of addresses
     // The addresses must be consecutive
@@ -516,23 +493,24 @@ pub fn sync_write(
     // Sort the packets by ID then by address
     packets.sort_by(|a, b| a.id.cmp(&b.id).cmp(&b.address.cmp(&a.address)));
 
-    let mut params: Vec<u8> = vec![packets[0].address, *first_length * bytesize as u8];
+    let mut params: Vec<Parameter> = vec![
+        Parameter::unsigned(packets[0].address.into(), 1),
+        Parameter::unsigned((*length * bytesize) as u64, 1),
+    ];
 
     for (i, pck) in packets.iter().enumerate() {
         // Check if this packet is the first one for the servo
-        if i % *first_length as usize == 0 {
-            params.push(pck.id);
+        if i % *length as usize == 0 {
+            params.push(Parameter::unsigned(pck.id.into(), 1));
         }
 
-        let mut buf: Vec<u8> = vec![0; bytesize];
-        LittleEndian::write_uint(&mut buf, pck.data, bytesize);
-        params.extend(&buf);
+        params.push(pck.data);
     }
 
-    Ok(super::Packet::ProtocolOne(Packet::new_raw(
+    Ok(super::Packet::ProtocolOne(Packet::new(
         super::DynamixelID::Broadcast.into(),
         PacketType::Instruction(InstructionType::SyncWrite),
-        params,
+        &params,
     )))
 }
 
@@ -563,11 +541,11 @@ pub fn bulk_read(packets: &[super::BulkReadPacket]) -> Result<super::Packet, Str
         known_ids.push(i.id);
     }
 
-    let mut params: Vec<u64> = vec![0x00];
+    let mut params: Vec<Parameter> = vec![Parameter::unsigned(0, 1)];
     for i in packets {
-        params.push(i.length.into());
-        params.push(i.id.into());
-        params.push(i.address.into());
+        params.push(Parameter::unsigned(i.length.into(), 1));
+        params.push(Parameter::unsigned(i.id.into(), 1));
+        params.push(Parameter::unsigned(i.address.into(), 1));
     }
 
     Ok(super::Packet::ProtocolOne(Packet::new(

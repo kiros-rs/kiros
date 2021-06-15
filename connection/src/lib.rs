@@ -22,7 +22,7 @@ impl Default for ConnectionSettings {
     fn default() -> Self {
         ConnectionSettings {
             baudrate: Some(1_000_000),
-            path: Some(String::from("/dev/ttyACM1")), // This should be programatically found (based on target triple?)
+            path: Some(String::from("/dev/ttyACM0")), // This should be programatically found (based on target triple?)
             timeout: Some(Duration::from_millis(5)),
         }
     }

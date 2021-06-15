@@ -193,7 +193,7 @@ where
 #[derive(Debug, Eq, Ord, PartialEq, PartialOrd)]
 pub struct SyncPacket {
     pub id: u8, // Cannot be DynamixelID enum as only non-broadcast IDs allowed
-    pub data: u64,
+    pub data: Parameter,
     pub address: u8,
 }
 
@@ -204,14 +204,43 @@ pub struct BulkReadPacket {
     pub address: u8,
 }
 
-// TODO: convert this into a procedural macro that parses the enum and removes need for macro calls
-#[macro_export]
-macro_rules! impl_to_databytes {
-    ($t: ty, $enum:ident $(:: $enum_path:ident)*) => {
-        impl From<$t> for DataBytes {
-            fn from(num: $t) -> DataBytes {
-                $enum $(:: $enum_path)* (num)
-            }
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub enum ParameterType {
+    Signed(i64),
+    Unsigned(u64),
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+pub struct Parameter {
+    pub param_type: ParameterType,
+    pub len: usize,
+}
+
+impl Parameter {
+    pub fn signed(value: i64, len: usize) -> Self {
+        Self {
+            param_type: ParameterType::Signed(value),
+            len,
         }
-    };
+    }
+
+    pub fn unsigned(value: u64, len: usize) -> Self {
+        Self {
+            param_type: ParameterType::Unsigned(value),
+            len,
+        }
+    }
+
+    pub fn as_bytes(&self) -> Vec<u8> {
+        let bytes = match self.param_type {
+            ParameterType::Signed(val) => val.to_le_bytes(),
+            ParameterType::Unsigned(val) => val.to_le_bytes(),
+        };
+
+        bytes[..self.len].into()
+    }
+
+    pub fn from_slice(value: &[Parameter]) -> Vec<u8> {
+        value.iter().map(|i| i.as_bytes()).flatten().collect()
+    }
 }
