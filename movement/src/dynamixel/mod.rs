@@ -8,6 +8,7 @@ use ron::de::from_str;
 use sensor::DataSensor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
@@ -102,6 +103,14 @@ pub struct Dynamixel<C: Connect, T: Num> {
     pub protocol: Protocol,
 }
 
+#[derive(Debug, Error)]
+pub enum DynamixelError {
+    #[error("Unable to find template for Dynamixel: {0}")]
+    InvalidTemplate(String),
+    #[error("No data name for row")]
+    NoDataName,
+}
+
 // There should be a builder pattern for this struct
 impl<C, T> Dynamixel<C, T>
 where
@@ -109,8 +118,11 @@ where
     T: Num,
 {
     /// Create a new Dynamixel servo from template
-    pub fn from_template(name: &str, connection_handler: C, protocol: Protocol) -> Self {
-        let data: &str = DYNAMIXELS.get(name).unwrap();
+    pub fn from_template(name: &str, connection_handler: C, protocol: Protocol) -> Result<Self, DynamixelError> {
+        let data: &str = match DYNAMIXELS.get(name) {
+            Some(val) => val,
+            None => return Err(DynamixelError::InvalidTemplate(name.to_string())),
+        };
         // This should probably be changed to use num-traits in the future
         let rows: Vec<ControlTableData<u64>> = from_str(data).unwrap();
 
@@ -119,7 +131,10 @@ where
         let mut control_table: HashMap<String, ControlTableType> = HashMap::new();
         for row in rows {
             // In the future, there needs to be handling for None
-            let name = row.data_name.unwrap();
+            let name = match row.data_name {
+                Some(val) => val,
+                None => return Err(DynamixelError::NoDataName)
+            };
             let value = match CONTROL_TABLE_TYPES.get(&*name) {
                 Some(value) => *value,
                 None => ControlTableType::Uncategorized,
@@ -128,7 +143,7 @@ where
             control_table.insert(name, value);
         }
 
-        Self {
+        Ok(Self {
             connection_handler: Box::new(connection_handler),
             control_table,
             sensors: HashMap::new(),
@@ -136,7 +151,7 @@ where
             information: HashMap::new(),
             parameters: HashMap::new(),
             protocol,
-        }
+        })
     }
 
     
