@@ -1,12 +1,18 @@
 use super::PacketManipulation;
 use std::io::{Read, Write};
 
+// NOTE: there isn't really any particular place to put this note so I'll just put it here
+// When connected to multiple Dynamixels running different protocols, it should be possible to differentiate
+// by doing one or both of these methods
+// - Pulling all bytes from buffer and treating it as a complete packet
+// - Attempt to parse as a protocol 2 packet before failing over to protocol 1
+
 pub fn write_packet<W, P>(connection: &mut W, packet: &P)
 where
     W: Write,
     P: PacketManipulation,
 {
-    let pck = packet.generate().unwrap();
+    let pck = packet.generate();
     connection.write(&pck).unwrap();
 }
 

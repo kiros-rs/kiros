@@ -54,6 +54,7 @@ fn main() {
     )
     .unwrap();
 
+    // These could be turned into a programmatically generated enum
     writeln!(
         &mut file,
         "static CONTROL_TABLE_TYPES: phf::Map<&'static str, ControlTableType> = \n{};\n",

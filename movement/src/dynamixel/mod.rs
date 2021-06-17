@@ -8,6 +8,7 @@ use ron::de::from_str;
 use sensor::DataSensor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
+use thiserror::Error;
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
@@ -15,6 +16,11 @@ include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 /// A protocol-agnostic representation of a Dynamixel packet
 pub enum Packet {
     ProtocolOne(protocol_one::Packet),
+}
+
+pub enum Protocol {
+    ProtocolOne,
+    ProtocolTwo,
 }
 
 /// The abstract categories an item in the control table
@@ -93,11 +99,16 @@ pub struct Dynamixel<C: Connect, T: Num> {
     pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
     pub information: HashMap<String, ControlTableData<T>>,
-    pub parameters: HashMap<String, ControlTableData<T>>, // There should be a  struct
-    // Also something for 'values' eg "Goal Position" (should this be incorporated into ?)
-    pub last_packet: Option<Packet>,
-    pub sent_packets: Vec<Packet>,
-    pub collects_packets: bool,
+    pub parameters: HashMap<String, ControlTableData<T>>,
+    pub protocol: Protocol,
+}
+
+#[derive(Debug, Error)]
+pub enum DynamixelError {
+    #[error("Unable to find template for Dynamixel: {0}")]
+    InvalidTemplate(String),
+    #[error("No data name for row")]
+    NoDataName,
 }
 
 // There should be a builder pattern for this struct
@@ -107,8 +118,11 @@ where
     T: Num,
 {
     /// Create a new Dynamixel servo from template
-    pub fn from_template(name: &str, connection_handler: C) -> Self {
-        let data: &str = DYNAMIXELS.get(name).unwrap();
+    pub fn from_template(name: &str, connection_handler: C, protocol: Protocol) -> Result<Self, DynamixelError> {
+        let data: &str = match DYNAMIXELS.get(name) {
+            Some(val) => val,
+            None => return Err(DynamixelError::InvalidTemplate(name.to_string())),
+        };
         // This should probably be changed to use num-traits in the future
         let rows: Vec<ControlTableData<u64>> = from_str(data).unwrap();
 
@@ -117,7 +131,10 @@ where
         let mut control_table: HashMap<String, ControlTableType> = HashMap::new();
         for row in rows {
             // In the future, there needs to be handling for None
-            let name = row.data_name.unwrap();
+            let name = match row.data_name {
+                Some(val) => val,
+                None => return Err(DynamixelError::NoDataName)
+            };
             let value = match CONTROL_TABLE_TYPES.get(&*name) {
                 Some(value) => *value,
                 None => ControlTableType::Uncategorized,
@@ -126,18 +143,18 @@ where
             control_table.insert(name, value);
         }
 
-        Self {
+        Ok(Self {
             connection_handler: Box::new(connection_handler),
             control_table,
             sensors: HashMap::new(),
             components: HashMap::new(),
             information: HashMap::new(),
             parameters: HashMap::new(),
-            last_packet: None,
-            sent_packets: vec![],
-            collects_packets: false,
-        }
+            protocol,
+        })
     }
+
+    
 }
 
 /// A representation of the 2 movement states a Dynamixel can be in:
@@ -155,7 +172,6 @@ pub enum DynamixelID {
     ID(u8),
 }
 
-// Consider using the num-traits crate to make this more broad?
 impl From<DynamixelID> for u8 {
     fn from(item: DynamixelID) -> Self {
         match item {
@@ -164,11 +180,10 @@ impl From<DynamixelID> for u8 {
         }
     }
 }
-
 // TODO: Rename this to something better
 pub trait PacketManipulation {
     fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8;
-    fn generate(&self) -> Result<Vec<u8>, String>;
+    fn generate(&self) -> Vec<u8>;
 }
 
 // Remove 'get' prefix?
@@ -202,6 +217,7 @@ pub struct Parameter {
 }
 
 impl Parameter {
+    // This should return a result if bytes of value is larger than len
     pub fn signed(value: i64, len: usize) -> Self {
         Self {
             param_type: ParameterType::Signed(value),
@@ -209,6 +225,7 @@ impl Parameter {
         }
     }
 
+    // This should return a result if bytes of value is larger than len
     pub fn unsigned(value: u64, len: usize) -> Self {
         Self {
             param_type: ParameterType::Unsigned(value),
@@ -222,6 +239,7 @@ impl Parameter {
             ParameterType::Unsigned(val) => val.to_le_bytes(),
         };
 
+        // This should panic if any data is being discarded
         bytes[..self.len].into()
     }
 
