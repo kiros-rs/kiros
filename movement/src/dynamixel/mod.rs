@@ -17,6 +17,11 @@ pub enum Packet {
     ProtocolOne(protocol_one::Packet),
 }
 
+pub enum Protocol {
+    ProtocolOne,
+    ProtocolTwo,
+}
+
 /// The abstract categories an item in the control table
 /// can be part of.
 #[derive(Clone, Copy, Debug)]
@@ -93,11 +98,8 @@ pub struct Dynamixel<C: Connect, T: Num> {
     pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
     pub components: HashMap<String, ()>, // should become a custom datatype/enum
     pub information: HashMap<String, ControlTableData<T>>,
-    pub parameters: HashMap<String, ControlTableData<T>>, // There should be a  struct
-    // Also something for 'values' eg "Goal Position" (should this be incorporated into ?)
-    pub last_packet: Option<Packet>,
-    pub sent_packets: Vec<Packet>,
-    pub collects_packets: bool,
+    pub parameters: HashMap<String, ControlTableData<T>>,
+    pub protocol: Protocol,
 }
 
 // There should be a builder pattern for this struct
@@ -107,7 +109,7 @@ where
     T: Num,
 {
     /// Create a new Dynamixel servo from template
-    pub fn from_template(name: &str, connection_handler: C) -> Self {
+    pub fn from_template(name: &str, connection_handler: C, protocol: Protocol) -> Self {
         let data: &str = DYNAMIXELS.get(name).unwrap();
         // This should probably be changed to use num-traits in the future
         let rows: Vec<ControlTableData<u64>> = from_str(data).unwrap();
@@ -133,11 +135,11 @@ where
             components: HashMap::new(),
             information: HashMap::new(),
             parameters: HashMap::new(),
-            last_packet: None,
-            sent_packets: vec![],
-            collects_packets: false,
+            protocol,
         }
     }
+
+    
 }
 
 /// A representation of the 2 movement states a Dynamixel can be in:
@@ -155,7 +157,6 @@ pub enum DynamixelID {
     ID(u8),
 }
 
-// Consider using the num-traits crate to make this more broad?
 impl From<DynamixelID> for u8 {
     fn from(item: DynamixelID) -> Self {
         match item {
@@ -164,11 +165,10 @@ impl From<DynamixelID> for u8 {
         }
     }
 }
-
 // TODO: Rename this to something better
 pub trait PacketManipulation {
     fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8;
-    fn generate(&self) -> Result<Vec<u8>, String>;
+    fn generate(&self) -> Vec<u8>;
 }
 
 // Remove 'get' prefix?
@@ -202,6 +202,7 @@ pub struct Parameter {
 }
 
 impl Parameter {
+    // This should return a result if bytes of value is larger than len
     pub fn signed(value: i64, len: usize) -> Self {
         Self {
             param_type: ParameterType::Signed(value),
@@ -209,6 +210,7 @@ impl Parameter {
         }
     }
 
+    // This should return a result if bytes of value is larger than len
     pub fn unsigned(value: u64, len: usize) -> Self {
         Self {
             param_type: ParameterType::Unsigned(value),
@@ -222,6 +224,7 @@ impl Parameter {
             ParameterType::Unsigned(val) => val.to_le_bytes(),
         };
 
+        // This should panic if any data is being discarded
         bytes[..self.len].into()
     }
 

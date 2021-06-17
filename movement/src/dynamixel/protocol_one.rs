@@ -6,6 +6,43 @@
 use super::{PacketManipulation, Parameter};
 use std::collections::HashMap;
 use std::convert::TryFrom;
+use thiserror::Error;
+
+#[derive(Debug, Error)]
+pub enum ProtocolOneError {
+    #[error("Dynamixel returned error code {0:#04x?} {:?}", StatusType::get_error_types(*.0))]
+    DynamixelError(u8),
+    #[error("Value {0} is invalid!")]
+    InvalidValue(u8),
+    #[error("Length of {0} is invalid!")]
+    InvalidLength(usize),
+    #[error("The header {0:?} is invalid!")]
+    InvalidHeader(Vec<u8>),
+    #[error("The checksum of {0} is invalid!")]
+    InvalidChecksum(u8),
+    #[error("The instruction {0} is invalid!")]
+    InvalidInstruction(u8),
+    #[error("Error while processing sync write: {0}")]
+    SyncWrite(SyncWriteError),
+    #[error("Error while processing bulk read: {0}")]
+    BulkRead(BulkReadError)
+}
+
+#[derive(Debug, Error)]
+pub enum SyncWriteError {
+    #[error("Must have at least 1 Dynamixel!")]
+    NoDynamixels,
+    #[error("Inconsistent byte size!")]
+    InconsistentSize,
+    #[error("Inconsistent data length!")]
+    InconsistentLength,
+}
+
+#[derive(Debug, Error)]
+pub enum BulkReadError {
+    #[error("Cannot address the same ID more than once!")]
+    SameID(u8),
+}
 
 /// The types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]
@@ -38,8 +75,8 @@ impl From<InstructionType> for u8 {
 }
 
 impl TryFrom<u8> for InstructionType {
-    type Error = &'static str;
-    fn try_from(instruction: u8) -> Result<Self, Self::Error> {
+    type Error = ProtocolOneError;
+    fn try_from(instruction: u8) -> Result<Self, ProtocolOneError> {
         match instruction {
             1 => Ok(Self::Ping),
             2 => Ok(Self::Read),
@@ -50,7 +87,7 @@ impl TryFrom<u8> for InstructionType {
             7 => Ok(Self::Reboot),
             131 => Ok(Self::SyncWrite),
             146 => Ok(Self::BulkRead),
-            _ => Err("Unable to match out-of-range instruction!"),
+            val => Err(ProtocolOneError::InvalidValue(val)),
         }
     }
 }
@@ -158,35 +195,28 @@ impl PacketManipulation for Packet {
 
     /// Provides packet-crafting functionality for servo communication. If you want
     /// to actually write to the servo, see the `ConnectionHandler` trait.
-    fn generate(&self) -> Result<Vec<u8>, String> {
-        if let PacketType::Instruction(instruction) = self.packet_type {
-            let mut packet = vec![255, 255, self.id, self.length, instruction.into()];
-            packet.extend(&self.bytes);
-            packet.push(self.checksum);
+    fn generate(&self) -> Vec<u8> {
+        let opcode = match &self.packet_type {
+            PacketType::Instruction(inst) => *inst as u8,
+            PacketType::Status(errs) => StatusType::get_error_code(&errs),
+        };
 
-            Ok(packet)
-        } else {
-            Err("You cannot write a status packet to a servo!".to_string())
-        }
+        let mut packet = vec![255, 255, self.id, self.length, opcode];
+        packet.extend(&self.bytes);
+        packet.push(self.checksum);
+
+        packet
     }
 }
 
-#[derive(Debug)]
-pub enum PacketReadError {
-    InvalidLength,
-    InvalidHeader,
-    InvalidChecksum,
-    InvalidInstruction,
-}
-
 impl Packet {
-    pub fn from_buf(&self, buf: &[u8]) -> Result<Self, PacketReadError> {
+    pub fn from_buf(&self, buf: &[u8]) -> Result<Self, ProtocolOneError> {
         // Run any instruction-spectific checks
         let params: Vec<Parameter> = match self.packet_type {
             PacketType::Instruction(op) => match op {
                 InstructionType::Ping => {
                     if buf.len() != 6 {
-                        return Err(PacketReadError::InvalidLength);
+                        return Err(ProtocolOneError::InvalidLength(buf.len()));
                     }
 
                     vec![]
@@ -195,7 +225,7 @@ impl Packet {
                     // The second parameter is guaranteed to be an unsigned u8
                     let data_len = self.parameters[1].as_bytes()[0] as usize;
                     if buf.len() != 6 + data_len {
-                        return Err(PacketReadError::InvalidLength);
+                        return Err(ProtocolOneError::InvalidLength(buf.len()));
                     }
 
                     // Need to use the stored range to figure out if this is a signed or unsigned value
@@ -213,7 +243,7 @@ impl Packet {
 
         // Validate header
         if buf[0..2] != [0xFF, 0xFF] {
-            return Err(PacketReadError::InvalidHeader);
+            return Err(ProtocolOneError::InvalidHeader(buf[0..2].to_vec()));
         }
 
         // Extract packet data
@@ -222,7 +252,7 @@ impl Packet {
 
         // Validate checksum
         if *chk != Self::checksum(id, len, &Parameter::from_slice(&params), error) {
-            return Err(PacketReadError::InvalidChecksum);
+            return Err(ProtocolOneError::InvalidChecksum(*chk));
         }
 
         Ok(Self::new(
@@ -277,7 +307,7 @@ pub fn read(id: u8, address: u8, length: u8) -> Packet {
     )
 }
 
-pub fn write(id: u8, address: u8, value: Parameter) -> Packet{
+pub fn write(id: u8, address: u8, value: Parameter) -> Packet {
     Packet::new(
         id,
         PacketType::Instruction(InstructionType::Write),
@@ -373,17 +403,17 @@ pub struct SyncPacket {
 ///     ]
 /// );
 /// ```
-pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, String> {
+pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, ProtocolOneError> {
     // The sync_write method has more conditions that must be satisfied
     // The servo must support sync_write
     // There must be at least 1 Dynamixel
     if packets.is_empty() {
-        return Err(String::from("Must have at least 1 Dynamixel!"));
+        return Err(ProtocolOneError::SyncWrite(SyncWriteError::NoDynamixels));
     }
 
     let bytesize = packets[0].data.len;
     if !packets.iter().all(|i| i.data.len != bytesize) {
-        return Err("Inconsistent byte size!".into());
+        return Err(ProtocolOneError::SyncWrite(SyncWriteError::InconsistentSize));
     }
 
     // There must be the same amount of data for every servo
@@ -396,7 +426,7 @@ pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, String> {
     // Since all lengths must be equal, we can use length in all future calculations
     let length = instruction_count.values().next().unwrap();
     if !instruction_count.values().all(|len| len == length) {
-        return Err("Inconsistent data length!".into());
+        return Err(ProtocolOneError::SyncWrite(SyncWriteError::InconsistentLength));
     }
     // Each servo must receive the same set of addresses
     // The addresses must be consecutive
@@ -449,11 +479,11 @@ pub struct BulkReadPacket {
 /// let Packet::ProtocolOne(packet) = bulk_read(packets).unwrap();
 /// assert_eq!(packet.generate().unwrap(), vec![0xFF, 0xFF, 0xFE, 0x09, 0x92, 0x00, 0x02, 0x01, 0x1E, 0x02, 0x02, 0x24, 0x1D]);
 /// ```
-pub fn bulk_read(packets: &[BulkReadPacket]) -> Result<Packet, String> {
+pub fn bulk_read(packets: &[BulkReadPacket]) -> Result<Packet, ProtocolOneError> {
     let mut known_ids: Vec<u8> = vec![];
     for i in packets {
         if known_ids.contains(&i.id) {
-            return Err(String::from("Cannot address the same ID more than once!"));
+            return Err(ProtocolOneError::BulkRead(BulkReadError::SameID(i.id)));
         }
 
         known_ids.push(i.id);

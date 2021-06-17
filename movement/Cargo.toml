@@ -12,6 +12,7 @@ num-traits = "0.2.14"
 phf = "0.8.0"
 ron = "0.6.4"
 serde = {version = "1.0.126", features = ["derive"]}
+thiserror = "1.0.25"
 
 [build-dependencies]
 phf_codegen = "0.8.0"
