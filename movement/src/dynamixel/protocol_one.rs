@@ -3,11 +3,9 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use super::{DynamixelInformation, PacketManipulation, Parameter};
-use num_traits::Num;
+use super::{PacketManipulation, Parameter};
 use std::collections::HashMap;
 use std::convert::TryFrom;
-use std::io::{Read, Write};
 
 /// The types of instructions that can be sent to a Dynamixel.
 #[derive(Copy, Clone, Debug)]

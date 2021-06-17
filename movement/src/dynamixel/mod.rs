@@ -1,13 +1,13 @@
 pub mod protocol_one;
 pub mod servo_connection;
 
+use connection::Connect;
 use num_traits::Num;
 use phf;
 use ron::de::from_str;
 use sensor::DataSensor;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::io::{Read, Write};
 
 include!(concat!(env!("OUT_DIR"), "/codegen.rs"));
 
@@ -87,7 +87,7 @@ pub struct ControlTableData<T> {
 ///
 /// Note that if you wish to broadcast to all servos, you will need to create
 /// an empty Dynamixel
-pub struct Dynamixel<C: Read + Write, T: Num> {
+pub struct Dynamixel<C: Connect, T: Num> {
     pub connection_handler: Box<C>,
     pub control_table: HashMap<String, ControlTableType>,
     pub sensors: HashMap<String, Box<dyn DataSensor<isize>>>,
@@ -103,7 +103,7 @@ pub struct Dynamixel<C: Read + Write, T: Num> {
 // There should be a builder pattern for this struct
 impl<C, T> Dynamixel<C, T>
 where
-    C: Read + Write,
+    C: Connect,
     T: Num,
 {
     /// Create a new Dynamixel servo from template
@@ -180,7 +180,7 @@ pub trait DynamixelInformation {
 // return values should be wrappen in Option
 impl<C, T> DynamixelInformation for Dynamixel<C, T>
 where
-    C: Read + Write,
+    C: Connect,
     T: Num,
 {
     fn get_id(&self) -> DynamixelID {

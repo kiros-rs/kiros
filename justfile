@@ -96,13 +96,6 @@ doc:
   cargo doc
   @# When there is an mdbook it should compile that too
 
-# This should probably be used when running CI
-# Output the health status of the codebase
-health:
-  cargo outdated
-  cargo deny check
-  cargo cache
-
 # Install the KIROS development toolchain
 install-toolchain:
   @if ! command -v rustup &> /dev/null; then \
@@ -114,7 +107,19 @@ install-toolchain:
   cargo install cargo-outdated
   cargo install cargo-deny
   cargo install cargo-cache
+  cargo install cargo-udeps
+  cargo install cargo-bloat
+  cargo install flamegraph
 
+# Integrate into CI?
+health:
+  cargo deny check
+  cargo outdated --root-deps-only
+  cargo udeps --quiet
+
+profile:
+  cargo bloat
+  cargo flamegraph
 build-release:
   BUILD_MODE=RELEASE just clean-build all
   just doc
