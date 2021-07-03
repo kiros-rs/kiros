@@ -7,6 +7,8 @@ pub enum VirtualMode {
     Random { min: usize, max: usize },
     Constant(i64),
     Broken(Error), // Constantly returns err
+    Loop,
+    Output,
     Empty,
 }
 

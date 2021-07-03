@@ -1,9 +1,9 @@
 pub mod protocol_one;
-pub mod servo_connection;
 
 use connection::Connect;
 use num_traits::Num;
 use phf;
+use protocol_one::ProtocolOneError;
 use ron::de::from_str;
 use sensor::DataSensor;
 use serde::{Deserialize, Serialize};
@@ -21,6 +21,12 @@ pub enum Packet {
 pub enum Protocol {
     ProtocolOne,
     ProtocolTwo,
+}
+
+#[derive(Debug, Error)]
+pub enum ProtocolError {
+    #[error("Protocol one error: {:?}", 0)]
+    ProtocolOne(ProtocolOneError),
 }
 
 /// The abstract categories an item in the control table
@@ -55,6 +61,7 @@ pub struct ModbusAddress {
     pub byte: Option<ModbusByte>,
 }
 
+// Fix this later
 #[derive(Serialize, Deserialize, Debug)]
 pub enum DynamixelAddress<T> {
     Standard(T),
@@ -109,6 +116,26 @@ pub enum DynamixelError {
     InvalidTemplate(String),
     #[error("No data name for row")]
     NoDataName,
+    #[error("No matching address for Dynamixel: {0}")]
+    NoAddress(String),
+    #[error("Dynamixel protocol error: {0}")]
+    Protocol(ProtocolError),
+    #[error("Communication error: {0}")]
+    CommunicationError(std::io::Error),
+    #[error("Incorrect packet type")]
+    IncorrectPacketType,
+}
+
+impl From<std::io::Error> for DynamixelError {
+    fn from(item: std::io::Error) -> Self {
+        DynamixelError::CommunicationError(item)
+    }
+}
+
+impl From<ProtocolOneError> for DynamixelError {
+    fn from(item: ProtocolOneError) -> Self {
+        DynamixelError::Protocol(ProtocolError::ProtocolOne(item))
+    }
 }
 
 // There should be a builder pattern for this struct
@@ -118,7 +145,11 @@ where
     T: Num,
 {
     /// Create a new Dynamixel servo from template
-    pub fn from_template(name: &str, connection_handler: C, protocol: Protocol) -> Result<Self, DynamixelError> {
+    pub fn from_template(
+        name: &str,
+        connection_handler: C,
+        protocol: Protocol,
+    ) -> Result<Self, DynamixelError> {
         let data: &str = match DYNAMIXELS.get(name) {
             Some(val) => val,
             None => return Err(DynamixelError::InvalidTemplate(name.to_string())),
@@ -133,7 +164,7 @@ where
             // In the future, there needs to be handling for None
             let name = match row.data_name {
                 Some(val) => val,
-                None => return Err(DynamixelError::NoDataName)
+                None => return Err(DynamixelError::NoDataName),
             };
             let value = match CONTROL_TABLE_TYPES.get(&*name) {
                 Some(value) => *value,
@@ -154,7 +185,41 @@ where
         })
     }
 
-    
+    fn protocol_one_tx_rx(
+        &mut self,
+        pck: protocol_one::Packet,
+        len: usize,
+    ) -> Result<Packet, DynamixelError> {
+        println!("Write: {:?}", pck.generate());
+        self.connection_handler.write_all(&pck.generate())?;
+        let mut buf: Vec<u8> = vec![0u8; len];
+        self.connection_handler.read_exact(&mut buf)?;
+        println!("Read: {:?}", buf);
+        let resp = pck.response(&buf)?;
+        if let protocol_one::PacketType::Status(errs) = &resp.packet_type {
+            let err_code = protocol_one::StatusType::get_error_code(errs);
+
+            if err_code == 0 {
+                Ok(Packet::ProtocolOne(resp))
+            } else {
+                Err(DynamixelError::Protocol(ProtocolError::ProtocolOne(
+                    ProtocolOneError::DynamixelError(err_code),
+                )))
+            }
+        } else {
+            Err(DynamixelError::IncorrectPacketType)
+        }
+    }
+
+    pub fn ping(&mut self) -> Result<Packet, DynamixelError> {
+        match self.protocol {
+            Protocol::ProtocolOne => {
+                let pck = protocol_one::ping(u8::from(self.get_id()));
+                self.protocol_one_tx_rx(pck, 6)
+            }
+            Protocol::ProtocolTwo => unimplemented!(),
+        }
+    }
 }
 
 /// A representation of the 2 movement states a Dynamixel can be in:
@@ -180,8 +245,8 @@ impl From<DynamixelID> for u8 {
         }
     }
 }
-// TODO: Rename this to something better
-pub trait PacketManipulation {
+
+pub trait PacketOperation {
     fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8;
     fn generate(&self) -> Vec<u8>;
 }
@@ -204,13 +269,13 @@ where
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub enum ParameterType {
     Signed(i64),
     Unsigned(u64),
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, PartialOrd, Ord)]
+#[derive(Clone, Copy, Debug, Hash, Eq, Ord, PartialEq, PartialOrd, Serialize, Deserialize)]
 pub struct Parameter {
     pub param_type: ParameterType,
     pub len: usize,
@@ -218,7 +283,17 @@ pub struct Parameter {
 
 impl Parameter {
     // This should return a result if bytes of value is larger than len
-    pub fn signed(value: i64, len: usize) -> Self {
+    pub fn signed(value: i64) -> Self {
+        let len = if value <= i8::MAX.into() {
+            1
+        } else if value <= i16::MAX.into() {
+            2
+        } else if value <= i32::MAX.into() {
+            3
+        } else {
+            4
+        };
+
         Self {
             param_type: ParameterType::Signed(value),
             len,
@@ -226,7 +301,17 @@ impl Parameter {
     }
 
     // This should return a result if bytes of value is larger than len
-    pub fn unsigned(value: u64, len: usize) -> Self {
+    pub fn unsigned(value: u64) -> Self {
+        let len = if value <= u8::MAX.into() {
+            1
+        } else if value <= u16::MAX.into() {
+            2
+        } else if value <= u32::MAX.into() {
+            3
+        } else {
+            4
+        };
+
         Self {
             param_type: ParameterType::Unsigned(value),
             len,

@@ -41,6 +41,8 @@ fn main() {
             .split('.')
             .next()
             .unwrap();
+
+        // Prepend a backslash to each double-quote (")
         let f = read_to_string(entries[entry].path()).unwrap();
         let val = f.split('"').collect::<Vec<&str>>().join("\\\"");
 

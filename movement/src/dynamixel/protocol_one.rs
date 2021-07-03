@@ -3,7 +3,9 @@
 //! communicate with Robotis 'Dynamixel' servos via their
 //! [Protocol 1.0](https://emanual.robotis.com/docs/en/dxl/protocol1/)
 
-use super::{PacketManipulation, Parameter};
+use crate::dynamixel::ParameterType;
+
+use super::{PacketOperation, Parameter};
 use std::collections::HashMap;
 use std::convert::TryFrom;
 use thiserror::Error;
@@ -25,7 +27,7 @@ pub enum ProtocolOneError {
     #[error("Error while processing sync write: {0}")]
     SyncWrite(SyncWriteError),
     #[error("Error while processing bulk read: {0}")]
-    BulkRead(BulkReadError)
+    BulkRead(BulkReadError),
 }
 
 #[derive(Debug, Error)]
@@ -97,9 +99,6 @@ impl TryFrom<u8> for InstructionType {
 /// <https://emanual.robotis.com/docs/en/dxl/protocol1/#status-packetreturn-packet>
 #[derive(Clone, Copy, Debug)]
 pub enum StatusType {
-    // This needs work - maybe a Result to represent either success or failure?
-    // It should not be possible to have Success and Overload at the same time.
-    Success,
     Instruction,
     Overload,
     Checksum,
@@ -117,7 +116,6 @@ impl StatusType {
 
         for err in errors {
             let index = match err {
-                Self::Success => return 0,
                 Self::Instruction => 1,
                 Self::Overload => 2,
                 Self::Checksum => 3,
@@ -183,7 +181,7 @@ pub struct Packet {
     checksum: u8,
 }
 
-impl PacketManipulation for Packet {
+impl PacketOperation for Packet {
     /// Calculates the checksum for the packet
     fn checksum(id: u8, length: u8, parameters: &[u8], opcode: u8) -> u8 {
         let mut sum: usize = id as usize + length as usize;
@@ -197,8 +195,8 @@ impl PacketManipulation for Packet {
     /// to actually write to the servo, see the `ConnectionHandler` trait.
     fn generate(&self) -> Vec<u8> {
         let opcode = match &self.packet_type {
-            PacketType::Instruction(inst) => *inst as u8,
-            PacketType::Status(errs) => StatusType::get_error_code(&errs),
+            PacketType::Instruction(inst) => u8::from(*inst),
+            PacketType::Status(errs) => StatusType::get_error_code(errs),
         };
 
         let mut packet = vec![255, 255, self.id, self.length, opcode];
@@ -210,12 +208,13 @@ impl PacketManipulation for Packet {
 }
 
 impl Packet {
-    pub fn from_buf(&self, buf: &[u8]) -> Result<Self, ProtocolOneError> {
+    pub fn response(&self, buf: &[u8]) -> Result<Self, ProtocolOneError> {
         // Run any instruction-spectific checks
         let params: Vec<Parameter> = match self.packet_type {
             PacketType::Instruction(op) => match op {
                 InstructionType::Ping => {
                     if buf.len() != 6 {
+                        println!("{:?}", buf);
                         return Err(ProtocolOneError::InvalidLength(buf.len()));
                     }
 
@@ -231,14 +230,17 @@ impl Packet {
                     // Need to use the stored range to figure out if this is a signed or unsigned value
                     let mut bytes = [0u8; 8];
                     bytes[..data_len].clone_from_slice(&buf[5..(data_len + 5)]);
-                    vec![Parameter::unsigned(u64::from_le_bytes(bytes), data_len)]
+                    vec![Parameter {
+                        param_type: ParameterType::Unsigned(u64::from_le_bytes(bytes)),
+                        len: data_len,
+                    }]
                 }
                 _ => buf[5..buf.len() - 1]
                     .iter()
-                    .map(|i| Parameter::unsigned(*i as u64, 1))
+                    .map(|i| Parameter::unsigned(*i as u64))
                     .collect(),
             },
-            PacketType::Status(_) => todo!(),
+            PacketType::Status(_) => todo!(), // This should just error
         };
 
         // Validate header
@@ -265,7 +267,7 @@ impl Packet {
     /// Creates a new protocol 1 packet
     ///
     /// ```
-    /// use movement::dynamixel::PacketManipulation;
+    /// use movement::dynamixel::PacketOperation;
     /// use movement::dynamixel::protocol_one::{Packet, PacketType, InstructionType};
     ///
     /// let pck = Packet::new(1, PacketType::Instruction(InstructionType::Write), vec![25, 1]);
@@ -301,8 +303,8 @@ pub fn read(id: u8, address: u8, length: u8) -> Packet {
         id,
         PacketType::Instruction(InstructionType::Read),
         &[
-            Parameter::unsigned(address.into(), 1),
-            Parameter::unsigned(length.into(), 1),
+            Parameter::unsigned(address.into()),
+            Parameter::unsigned(length.into()),
         ],
     )
 }
@@ -311,7 +313,7 @@ pub fn write(id: u8, address: u8, value: Parameter) -> Packet {
     Packet::new(
         id,
         PacketType::Instruction(InstructionType::Write),
-        &[Parameter::unsigned(address.into(), 1), value],
+        &[Parameter::unsigned(address.into()), value],
     )
 }
 
@@ -319,32 +321,20 @@ pub fn register_write(id: u8, address: u8, value: Parameter) -> Packet {
     Packet::new(
         id,
         PacketType::Instruction(InstructionType::RegWrite),
-        &[Parameter::unsigned(address.into(), 1), value],
+        &[Parameter::unsigned(address.into()), value],
     )
 }
 
 pub fn action(id: u8) -> Packet {
-    Packet::new(
-        id,
-        PacketType::Instruction(InstructionType::Action),
-        &[],
-    )
+    Packet::new(id, PacketType::Instruction(InstructionType::Action), &[])
 }
 
 pub fn reset(id: u8) -> Packet {
-    Packet::new(
-        id,
-        PacketType::Instruction(InstructionType::Reset),
-        &[],
-    )
+    Packet::new(id, PacketType::Instruction(InstructionType::Reset), &[])
 }
 
 pub fn reboot(id: u8) -> Packet {
-    Packet::new(
-        id,
-        PacketType::Instruction(InstructionType::Reboot),
-        &[],
-    )
+    Packet::new(id, PacketType::Instruction(InstructionType::Reboot), &[])
 }
 
 /// A packet used to address the same instruction to a group of servos
@@ -413,7 +403,9 @@ pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, ProtocolOneErr
 
     let bytesize = packets[0].data.len;
     if !packets.iter().all(|i| i.data.len != bytesize) {
-        return Err(ProtocolOneError::SyncWrite(SyncWriteError::InconsistentSize));
+        return Err(ProtocolOneError::SyncWrite(
+            SyncWriteError::InconsistentSize,
+        ));
     }
 
     // There must be the same amount of data for every servo
@@ -426,7 +418,9 @@ pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, ProtocolOneErr
     // Since all lengths must be equal, we can use length in all future calculations
     let length = instruction_count.values().next().unwrap();
     if !instruction_count.values().all(|len| len == length) {
-        return Err(ProtocolOneError::SyncWrite(SyncWriteError::InconsistentLength));
+        return Err(ProtocolOneError::SyncWrite(
+            SyncWriteError::InconsistentLength,
+        ));
     }
     // Each servo must receive the same set of addresses
     // The addresses must be consecutive
@@ -435,14 +429,14 @@ pub fn sync_write(mut packets: Vec<SyncPacket>) -> Result<Packet, ProtocolOneErr
     packets.sort_by(|a, b| a.id.cmp(&b.id).cmp(&b.address.cmp(&a.address)));
 
     let mut params: Vec<Parameter> = vec![
-        Parameter::unsigned(packets[0].address.into(), 1),
-        Parameter::unsigned((*length * bytesize) as u64, 1),
+        Parameter::unsigned(packets[0].address.into()),
+        Parameter::unsigned((*length * bytesize) as u64),
     ];
 
     for (i, pck) in packets.iter().enumerate() {
         // Check if this packet is the first one for the servo
         if i % *length as usize == 0 {
-            params.push(Parameter::unsigned(pck.id.into(), 1));
+            params.push(Parameter::unsigned(pck.id.into()));
         }
 
         params.push(pck.data);
@@ -489,11 +483,11 @@ pub fn bulk_read(packets: &[BulkReadPacket]) -> Result<Packet, ProtocolOneError>
         known_ids.push(i.id);
     }
 
-    let mut params: Vec<Parameter> = vec![Parameter::unsigned(0, 1)];
+    let mut params: Vec<Parameter> = vec![Parameter::unsigned(0)];
     for i in packets {
-        params.push(Parameter::unsigned(i.length.into(), 1));
-        params.push(Parameter::unsigned(i.id.into(), 1));
-        params.push(Parameter::unsigned(i.address.into(), 1));
+        params.push(Parameter::unsigned(i.length.into()));
+        params.push(Parameter::unsigned(i.id.into()));
+        params.push(Parameter::unsigned(i.address.into()));
     }
 
     Ok(Packet::new(
